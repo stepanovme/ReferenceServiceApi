@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import uuid
+from datetime import datetime
+
 from sqlalchemy import bindparam, or_, text
 from sqlalchemy.orm import Session
 
@@ -665,14 +668,20 @@ class ReferenceService:
         return result
 
     def create_object(self, payload: ObjectCreate):
-        obj = ObjectDB(**payload.model_dump())
+        data = payload.model_dump(exclude_none=True)
+        data.setdefault("id", str(uuid.uuid4()))
+        data.setdefault("created_at", datetime.utcnow())
+        obj = ObjectDB(**data)
         self.db.add(obj)
         self.db.commit()
         self.db.refresh(obj)
         return self.get_object(obj.id)
 
     def create_counterparty(self, payload: CounterpartyCreate):
-        counterparty = CounterpartyDB(**payload.model_dump())
+        data = payload.model_dump(exclude_none=True)
+        data.setdefault("id", str(uuid.uuid4()))
+        data.setdefault("created_at", datetime.utcnow())
+        counterparty = CounterpartyDB(**data)
         self.db.add(counterparty)
         self.db.commit()
         self.db.refresh(counterparty)
@@ -687,7 +696,8 @@ class ReferenceService:
         }
 
     def create_details_llc(self, payload: DetailsLLCCreate):
-        details = DetailsLLCDB(**payload.model_dump())
+        data = payload.model_dump(exclude_none=True)
+        details = DetailsLLCDB(**data)
         self.db.add(details)
         self.db.commit()
         self.db.refresh(details)
@@ -697,7 +707,8 @@ class ReferenceService:
         }
 
     def create_details_ip(self, payload: DetailsIPCreate):
-        details = DetailsIPDB(**payload.model_dump())
+        data = payload.model_dump(exclude_none=True)
+        details = DetailsIPDB(**data)
         self.db.add(details)
         self.db.commit()
         self.db.refresh(details)
@@ -726,14 +737,18 @@ class ReferenceService:
         }
 
     def create_person(self, payload: PersonCreate):
-        person = PersonDB(**payload.model_dump())
+        data = payload.model_dump(exclude_none=True)
+        data.setdefault("id", str(uuid.uuid4()))
+        person = PersonDB(**data)
         self.db.add(person)
         self.db.commit()
         self.db.refresh(person)
         return self.get_person(person.id)
 
     def create_employee(self, payload: EmployeeCreate):
-        employee = EmployeeDB(**payload.model_dump())
+        data = payload.model_dump(exclude_none=True)
+        data.setdefault("id", str(uuid.uuid4()))
+        employee = EmployeeDB(**data)
         self.db.add(employee)
         self.db.commit()
         self.db.refresh(employee)
@@ -748,7 +763,10 @@ class ReferenceService:
         }
 
     def create_bank_account(self, payload: BankAccountCreate):
-        account = BankAccountDB(**payload.model_dump())
+        data = payload.model_dump(exclude_none=True)
+        data.setdefault("id", str(uuid.uuid4()))
+        data.setdefault("is_treasury", False)
+        account = BankAccountDB(**data)
         self.db.add(account)
         self.db.commit()
         self.db.refresh(account)

@@ -106,7 +106,7 @@ class EmployeeDB(Base):
     phone_extra = Column(String(18))
     email_work = Column(String(100))
     email_extra = Column(String(100))
-    role_type = Column(String(20), nullable=False)
+    role_type = Column(String(20))
     comment = Column(Text)
 
 
@@ -141,6 +141,6 @@ class PersonDB(Base):
     name = Column(String(100), nullable=False)
     last_naem = Column(String(100), nullable=False)
     middle_name = Column(String(100))
-    phone_personal = Column(String(18), nullable=False)
-    email_personal = Column(String(200), nullable=False)
-    birth_date = Column(Date, nullable=False)
+    phone_personal = Column(String(18))
+    email_personal = Column(String(200))
+    birth_date = Column(Date)

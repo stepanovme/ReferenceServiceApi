@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class ObjectCreate(BaseModel):
-    id: str
+    id: Optional[str] = None
     short_name: Optional[str] = None
     full_name: Optional[str] = None
     address: Optional[str] = None
@@ -18,7 +18,7 @@ class ObjectCreate(BaseModel):
 
 
 class CounterpartyCreate(BaseModel):
-    id: str
+    id: Optional[str] = None
     type: str = Field(..., description="LLC, IP, PHYSIC")
     short_name: str
     full_name: str
@@ -34,7 +34,7 @@ class CounterpartyAdditionalCreate(BaseModel):
 
 
 class DetailsLLCCreate(BaseModel):
-    id: int
+    id: Optional[int] = None
     counterparties_id: str
     inn: str
     kpp: str
@@ -56,7 +56,7 @@ class DetailsLLCCreate(BaseModel):
 
 
 class DetailsIPCreate(BaseModel):
-    id: int
+    id: Optional[int] = None
     counterparty_id: str
     inn: str
     ogrnip: Optional[str] = None
@@ -86,18 +86,18 @@ class DetailsPhysCreate(BaseModel):
 
 
 class PersonCreate(BaseModel):
-    id: str
+    id: Optional[str] = None
     user_id: Optional[str] = None
     name: str
     last_naem: str
     middle_name: Optional[str] = None
-    phone_personal: str
-    email_personal: str
-    birth_date: date
+    phone_personal: Optional[str] = None
+    email_personal: Optional[str] = None
+    birth_date: Optional[date] = None
 
 
 class EmployeeCreate(BaseModel):
-    id: str
+    id: Optional[str] = None
     counterparty_id: str
     person_id: str
     position: Optional[str] = None
@@ -105,17 +105,17 @@ class EmployeeCreate(BaseModel):
     phone_extra: Optional[str] = None
     email_work: Optional[str] = None
     email_extra: Optional[str] = None
-    role_type: str
+    role_type: Optional[str] = None
     comment: Optional[str] = None
 
 
 class BankAccountCreate(BaseModel):
-    id: str
+    id: Optional[str] = None
     counterparty_id: str
     bank_name: str
     bik: str
     correspondent_account: str
     account_number: str
     account_name: str
-    is_treasury: bool
+    is_treasury: bool = False
     is_main: bool
