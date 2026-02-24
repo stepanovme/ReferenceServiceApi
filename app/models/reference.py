@@ -110,6 +110,16 @@ class EmployeeDB(Base):
     comment = Column(Text)
 
 
+class InternalEmployeeDB(Base):
+    __tablename__ = "internal_employees"
+
+    id = Column(CHAR(36), primary_key=True)
+    user_id = Column(CHAR(36), nullable=False)
+    counterparty_id = Column(CHAR(36), nullable=False)
+    position = Column(String(100))
+    department = Column(String(100))
+
+
 class ObjectDB(Base):
     __tablename__ = "objects"
 

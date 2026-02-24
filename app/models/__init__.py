@@ -6,6 +6,7 @@ from app.models.reference import (
     DetailsLLCDB,
     DetailsPhysDB,
     EmployeeDB,
+    InternalEmployeeDB,
     ObjectDB,
     PersonDB,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "DetailsLLCDB",
     "DetailsPhysDB",
     "EmployeeDB",
+    "InternalEmployeeDB",
     "ObjectDB",
     "PersonDB",
     "SessionDB",

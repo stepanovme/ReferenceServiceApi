@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.database import DbSession
+from app.database import AuthDbSession, DbSession
 from app.middleware.auth_middleware import get_session
 from app.schemas import (
     BankAccountCreate,
@@ -73,6 +73,18 @@ def create_person(payload: PersonCreate, db: DbSession):
 def get_employee_objects(employee_id: str, db: DbSession):
     service = ReferenceService(db)
     return service.list_objects_by_employee(employee_id)
+
+
+@employees_router.get("/internal", summary="Список сотрудников по отделам")
+def list_internal_employees(db: DbSession, auth_db: AuthDbSession):
+    service = ReferenceService(db)
+    return service.list_internal_employees(auth_db)
+
+
+@employees_router.get("/internal/departments", summary="Список отделов")
+def list_internal_departments(db: DbSession):
+    service = ReferenceService(db)
+    return service.list_internal_departments()
 
 
 @employees_router.post("", summary="Создать сотрудника")

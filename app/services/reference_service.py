@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import or_
+from sqlalchemy import bindparam, or_, text
 from sqlalchemy.orm import Session
 
 from app.models.reference import (
@@ -11,6 +11,7 @@ from app.models.reference import (
     DetailsLLCDB,
     DetailsPhysDB,
     EmployeeDB,
+    InternalEmployeeDB,
     ObjectDB,
     PersonDB,
 )
@@ -762,3 +763,61 @@ class ReferenceService:
             "is_treasury": bool(account.is_treasury),
             "is_main": bool(account.is_main),
         }
+
+    def list_internal_employees(self, auth_db: Session):
+        rows = (
+            self.db.query(InternalEmployeeDB, CounterpartyDB)
+            .join(CounterpartyDB, InternalEmployeeDB.counterparty_id == CounterpartyDB.id)
+            .all()
+        )
+        if not rows:
+            return []
+
+        user_ids = {internal_employee.user_id for internal_employee, _ in rows}
+        if user_ids:
+            query = text(
+                """
+                SELECT id, name, surname, patronymic
+                FROM users
+                WHERE id IN :ids
+                """
+            ).bindparams(bindparam("ids", expanding=True))
+            user_rows = auth_db.execute(query, {"ids": list(user_ids)}).fetchall()
+        else:
+            user_rows = []
+
+        users_by_id = {row[0]: row for row in user_rows}
+
+        grouped: dict[str, list[dict]] = {}
+        for internal_employee, counterparty in rows:
+            user = users_by_id.get(internal_employee.user_id)
+            full_name = None
+            if user:
+                _, name, surname, patronymic = user
+                parts = [surname, name, patronymic]
+                full_name = " ".join(part for part in parts if part)
+
+            department = internal_employee.department or "Без отдела"
+            grouped.setdefault(department, []).append(
+                {
+                    "user_id": internal_employee.user_id,
+                    "full_name": full_name,
+                    "company": counterparty.short_name,
+                    "position": internal_employee.position,
+                    "department": internal_employee.department,
+                }
+            )
+
+        return [
+            {"department": department, "employees": employees}
+            for department, employees in grouped.items()
+        ]
+
+    def list_internal_departments(self):
+        rows = (
+            self.db.query(InternalEmployeeDB.department)
+            .distinct()
+            .order_by(InternalEmployeeDB.department)
+            .all()
+        )
+        return [row[0] or "Без отдела" for row in rows]
