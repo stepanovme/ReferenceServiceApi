@@ -529,6 +529,128 @@ class ReferenceService:
             return self.get_counterparty_phys(counterparty_id)
         return None
 
+    def list_counterparty_summaries(self):
+        counterparties = self.db.query(CounterpartyDB).all()
+        if not counterparties:
+            return []
+
+        counterparty_ids = [cp.id for cp in counterparties]
+
+        llc_rows = (
+            self.db.query(DetailsLLCDB)
+            .filter(DetailsLLCDB.counterparties_id.in_(counterparty_ids))
+            .all()
+        )
+        ip_rows = (
+            self.db.query(DetailsIPDB)
+            .filter(DetailsIPDB.counterparty_id.in_(counterparty_ids))
+            .all()
+        )
+        phys_rows = (
+            self.db.query(DetailsPhysDB)
+            .filter(DetailsPhysDB.counterparty_id.in_(counterparty_ids))
+            .all()
+        )
+
+        llc_by_id = {row.counterparties_id: row for row in llc_rows}
+        ip_by_id = {row.counterparty_id: row for row in ip_rows}
+        phys_by_id = {row.counterparty_id: row for row in phys_rows}
+
+        person_ids = set()
+        for row in llc_rows:
+            person_ids.add(row.director_person_id)
+        for row in ip_rows:
+            person_ids.add(row.person_id)
+        for row in phys_rows:
+            person_ids.add(row.person_id)
+
+        persons = (
+            self.db.query(PersonDB).filter(PersonDB.id.in_(person_ids)).all()
+            if person_ids
+            else []
+        )
+        persons_by_id = {person.id: person for person in persons}
+
+        employees = (
+            self.db.query(EmployeeDB)
+            .filter(EmployeeDB.counterparty_id.in_(counterparty_ids))
+            .all()
+        )
+        employees_by_counterparty: dict[str, list[EmployeeDB]] = {}
+        for employee in employees:
+            employees_by_counterparty.setdefault(employee.counterparty_id, []).append(employee)
+
+        def pick_contact(counterparty_id: str, person_id: str | None):
+            if not person_id:
+                return None, None
+            employee_list = employees_by_counterparty.get(counterparty_id, [])
+            preferred = next(
+                (emp for emp in employee_list if emp.person_id == person_id),
+                None,
+            )
+            person = persons_by_id.get(person_id)
+            phone = (
+                preferred.phone_work
+                if preferred and preferred.phone_work
+                else person.phone_personal if person else None
+            )
+            email = (
+                preferred.email_work
+                if preferred and preferred.email_work
+                else person.email_personal if person else None
+            )
+            return phone, email
+
+        result = []
+        for cp in counterparties:
+            opf = {"LLC": "ООО", "IP": "ИП", "PHYSIC": "Физлицо"}.get(cp.type, cp.type)
+
+            address = None
+            inn = None
+            ogrn = None
+            kpp = None
+            person_id = None
+
+            if cp.type == "LLC":
+                details = llc_by_id.get(cp.id)
+                if details:
+                    address = details.legal_address
+                    inn = details.inn
+                    ogrn = details.ogrn
+                    kpp = details.kpp
+                    person_id = details.director_person_id
+            elif cp.type == "IP":
+                details = ip_by_id.get(cp.id)
+                if details:
+                    inn = details.inn
+                    ogrn = details.ogrnip
+                    person_id = details.person_id
+            elif cp.type == "PHYSIC":
+                details = phys_by_id.get(cp.id)
+                if details:
+                    address = details.address_registration
+                    inn = details.inn
+                    person_id = details.person_id
+
+            phone, email = pick_contact(cp.id, person_id)
+            inn_ogrn_kpp = "/".join(
+                [inn or "-", ogrn or "-", kpp or "-"]
+            )
+
+            result.append(
+                {
+                    "short_name": cp.short_name,
+                    "full_name": cp.full_name,
+                    "opf": opf,
+                    "address": address,
+                    "phone": phone,
+                    "email": email,
+                    "inn_ogrn_kpp": inn_ogrn_kpp,
+                }
+            )
+
+        return result
+
     def create_object(self, payload: ObjectCreate):
         obj = ObjectDB(**payload.model_dump())
         self.db.add(obj)

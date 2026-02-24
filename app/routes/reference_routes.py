@@ -125,6 +125,14 @@ def search_counterparties(q: str, db: DbSession):
 
 
 @counterparties_router.get(
+    "/summary", summary="Сводная информация по всем контрагентам"
+)
+def list_counterparty_summary(db: DbSession):
+    service = ReferenceService(db)
+    return service.list_counterparty_summaries()
+
+
+@counterparties_router.get(
     "/{counterparty_id}/employees", summary="Сотрудники контрагента"
 )
 def get_counterparty_employees(counterparty_id: str, db: DbSession):
