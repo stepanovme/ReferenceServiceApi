@@ -368,6 +368,11 @@ class ReferenceService:
                     "company_name": counterparty.short_name,
                     "role": employee.role_type,
                     "position": employee.position,
+                    "phone_work": employee.phone_work,
+                    "phone_extra": employee.phone_extra,
+                    "email_work": employee.email_work,
+                    "email_extra": employee.email_extra,
+                    "comment": employee.comment,
                 }
             )
 
@@ -376,6 +381,7 @@ class ReferenceService:
             result.append(
                 {
                     "id": person.id,
+                    "user_id": person.user_id,
                     "name": person.name,
                     "last_name": person.last_naem,
                     "middle_name": person.middle_name,
@@ -405,12 +411,18 @@ class ReferenceService:
                 "company_name": counterparty.short_name,
                 "role": employee.role_type,
                 "position": employee.position,
+                "phone_work": employee.phone_work,
+                "phone_extra": employee.phone_extra,
+                "email_work": employee.email_work,
+                "email_extra": employee.email_extra,
+                "comment": employee.comment,
             }
             for employee, counterparty in employees
         ]
 
         return {
             "id": person.id,
+            "user_id": person.user_id,
             "name": person.name,
             "last_name": person.last_naem,
             "middle_name": person.middle_name,

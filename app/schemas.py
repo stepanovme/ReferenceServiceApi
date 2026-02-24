@@ -87,6 +87,7 @@ class DetailsPhysCreate(BaseModel):
 
 class PersonCreate(BaseModel):
     id: str
+    user_id: Optional[str] = None
     name: str
     last_naem: str
     middle_name: Optional[str] = None

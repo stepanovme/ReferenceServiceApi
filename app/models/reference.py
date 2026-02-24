@@ -127,6 +127,7 @@ class PersonDB(Base):
     __tablename__ = "persons"
 
     id = Column(CHAR(36), primary_key=True)
+    user_id = Column(CHAR(36))
     name = Column(String(100), nullable=False)
     last_naem = Column(String(100), nullable=False)
     middle_name = Column(String(100))
