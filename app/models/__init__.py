@@ -1,5 +1,6 @@
 from app.models.reference import (
     BankAccountDB,
+    ContractDB,
     CounterpartyAdditionalDB,
     CounterpartyDB,
     DetailsIPDB,
@@ -7,13 +8,16 @@ from app.models.reference import (
     DetailsPhysDB,
     EmployeeDB,
     InternalEmployeeDB,
+    ObjectLevelDB,
     ObjectDB,
     PersonDB,
+    WorkTypeDB,
 )
 from app.models.session import SessionDB
 
 __all__ = [
     "BankAccountDB",
+    "ContractDB",
     "CounterpartyAdditionalDB",
     "CounterpartyDB",
     "DetailsIPDB",
@@ -21,7 +25,9 @@ __all__ = [
     "DetailsPhysDB",
     "EmployeeDB",
     "InternalEmployeeDB",
+    "ObjectLevelDB",
     "ObjectDB",
     "PersonDB",
+    "WorkTypeDB",
     "SessionDB",
 ]

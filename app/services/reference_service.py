@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.reference import (
     BankAccountDB,
+    ContractDB,
     CounterpartyAdditionalDB,
     CounterpartyDB,
     DetailsIPDB,
@@ -15,19 +16,24 @@ from app.models.reference import (
     DetailsPhysDB,
     EmployeeDB,
     InternalEmployeeDB,
+    ObjectLevelDB,
     ObjectDB,
     PersonDB,
+    WorkTypeDB,
 )
 from app.schemas import (
     BankAccountCreate,
+    ContractCreate,
     CounterpartyAdditionalCreate,
     CounterpartyCreate,
     DetailsIPCreate,
     DetailsLLCCreate,
     DetailsPhysCreate,
     EmployeeCreate,
+    ObjectLevelCreate,
     ObjectCreate,
     PersonCreate,
+    WorkTypeCreate,
 )
 
 
@@ -100,6 +106,55 @@ class ReferenceService:
             "created_at": obj.created_at,
             "updated_at": obj.updated_at,
         }
+
+    def list_object_levels(self, object_id: str):
+        rows = (
+            self.db.query(ObjectLevelDB, ContractDB, WorkTypeDB)
+            .outerjoin(ContractDB, ObjectLevelDB.contract_id == ContractDB.id)
+            .outerjoin(WorkTypeDB, ObjectLevelDB.work_type == WorkTypeDB.id)
+            .filter(ObjectLevelDB.object_id == object_id)
+            .order_by(ObjectLevelDB.level_number, ObjectLevelDB.created_at)
+            .all()
+        )
+        return [
+            {
+                "id": level.id,
+                "object_id": level.object_id,
+                "name": level.name,
+                "level_type": level.level_type,
+                "level_number": level.level_number,
+                "is_active": bool(level.is_active),
+                "work_type_id": level.work_type,
+                "work_type_name": work_type.name if work_type else None,
+                "contract_id": level.contract_id,
+                "contract_name": contract.name if contract else None,
+                "parent_id": level.parent_id,
+                "created_at": level.created_at,
+            }
+            for level, contract, work_type in rows
+        ]
+
+    def get_object_structure(self, object_id: str):
+        levels = self.list_object_levels(object_id)
+        if not levels:
+            return []
+
+        nodes = {}
+        for item in levels:
+            node = dict(item)
+            node["children"] = []
+            nodes[item["id"]] = node
+
+        roots = []
+        for node in nodes.values():
+            parent_id = node.get("parent_id")
+            parent = nodes.get(parent_id) if parent_id else None
+            if parent:
+                parent["children"].append(node)
+            else:
+                roots.append(node)
+
+        return roots
 
     def list_counterparties(self, counterparty_type: str | None, is_internal: bool | None):
         query = self.db.query(CounterpartyDB)
@@ -785,6 +840,74 @@ class ReferenceService:
             "account_name": account.account_name,
             "is_treasury": bool(account.is_treasury),
             "is_main": bool(account.is_main),
+        }
+
+    def list_contracts(self):
+        return [
+            {"id": contract.id, "contract_id": contract.contract_id, "name": contract.name}
+            for contract in self.db.query(ContractDB).all()
+        ]
+
+    def get_contract(self, contract_id: str):
+        contract = self.db.query(ContractDB).filter(ContractDB.id == contract_id).first()
+        if not contract:
+            return None
+        return {"id": contract.id, "contract_id": contract.contract_id, "name": contract.name}
+
+    def create_contract(self, payload: ContractCreate):
+        data = payload.model_dump(exclude_none=True)
+        data.setdefault("id", str(uuid.uuid4()))
+        contract = ContractDB(**data)
+        self.db.add(contract)
+        self.db.commit()
+        self.db.refresh(contract)
+        return {"id": contract.id, "contract_id": contract.contract_id, "name": contract.name}
+
+    def list_work_types(self):
+        return [
+            {"id": work_type.id, "name": work_type.name}
+            for work_type in self.db.query(WorkTypeDB).all()
+        ]
+
+    def get_work_type(self, work_type_id: str):
+        work_type = self.db.query(WorkTypeDB).filter(WorkTypeDB.id == work_type_id).first()
+        if not work_type:
+            return None
+        return {"id": work_type.id, "name": work_type.name}
+
+    def create_work_type(self, payload: WorkTypeCreate):
+        data = payload.model_dump(exclude_none=True)
+        data.setdefault("id", str(uuid.uuid4()))
+        work_type = WorkTypeDB(**data)
+        self.db.add(work_type)
+        self.db.commit()
+        self.db.refresh(work_type)
+        return {"id": work_type.id, "name": work_type.name}
+
+    def create_object_level(self, object_id: str, payload: ObjectLevelCreate):
+        data = payload.model_dump(exclude_none=True)
+        payload_object_id = data.get("object_id")
+        if payload_object_id and payload_object_id != object_id:
+            raise ValueError("object_id не совпадает")
+        data["object_id"] = object_id
+        data.setdefault("id", str(uuid.uuid4()))
+        data.setdefault("created_at", datetime.utcnow())
+
+        level = ObjectLevelDB(**data)
+        self.db.add(level)
+        self.db.commit()
+        self.db.refresh(level)
+        return {
+            "id": level.id,
+            "object_id": level.object_id,
+            "name": level.name,
+            "level_type": level.level_type,
+            "level_number": level.level_number,
+            "is_active": bool(level.is_active),
+            "work_type": level.work_type,
+            "contract_id": level.contract_id,
+            "parent_id": level.parent_id,
+            "created_at": level.created_at,
         }
 
     def list_internal_employees(self, auth_db: Session):

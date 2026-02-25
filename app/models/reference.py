@@ -120,6 +120,36 @@ class InternalEmployeeDB(Base):
     department = Column(String(100))
 
 
+class ContractDB(Base):
+    __tablename__ = "contracts"
+
+    id = Column(CHAR(36), primary_key=True)
+    contract_id = Column(CHAR(36))
+    name = Column(Text, nullable=False)
+
+
+class WorkTypeDB(Base):
+    __tablename__ = "work_types"
+
+    id = Column(CHAR(36), primary_key=True)
+    name = Column(String(255))
+
+
+class ObjectLevelDB(Base):
+    __tablename__ = "object_levels"
+
+    id = Column(CHAR(36), primary_key=True)
+    object_id = Column(CHAR(36), nullable=False)
+    name = Column(String(255))
+    level_type = Column(String(20), nullable=False)
+    level_number = Column(Integer, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    work_type = Column(CHAR(36))
+    contract_id = Column(CHAR(36))
+    created_at = Column(DateTime)
+    parent_id = Column(CHAR(36))
+
+
 class ObjectDB(Base):
     __tablename__ = "objects"
 

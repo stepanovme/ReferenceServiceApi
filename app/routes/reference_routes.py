@@ -4,14 +4,17 @@ from app.database import AuthDbSession, DbSession
 from app.middleware.auth_middleware import get_session
 from app.schemas import (
     BankAccountCreate,
+    ContractCreate,
     CounterpartyAdditionalCreate,
     CounterpartyCreate,
     DetailsIPCreate,
     DetailsLLCCreate,
     DetailsPhysCreate,
     EmployeeCreate,
+    ObjectLevelCreate,
     ObjectCreate,
     PersonCreate,
+    WorkTypeCreate,
 )
 from app.services.reference_service import ReferenceService
 
@@ -20,6 +23,8 @@ base_dependencies = [Depends(get_session)]
 objects_router = APIRouter(prefix="/objects", tags=["Объекты"], dependencies=base_dependencies)
 persons_router = APIRouter(prefix="/persons", tags=["Лица"], dependencies=base_dependencies)
 employees_router = APIRouter(prefix="/employees", tags=["Сотрудники"], dependencies=base_dependencies)
+contracts_router = APIRouter(prefix="/contracts", tags=["Договоры"], dependencies=base_dependencies)
+work_types_router = APIRouter(prefix="/work-types", tags=["Виды работ"], dependencies=base_dependencies)
 counterparties_router = APIRouter(
     prefix="/counterparties",
     tags=["Контрагенты"],
@@ -46,6 +51,27 @@ def get_object(object_id: str, db: DbSession):
 def create_object(payload: ObjectCreate, db: DbSession):
     service = ReferenceService(db)
     return service.create_object(payload)
+
+
+@objects_router.get("/{object_id}/levels", summary="Список уровней объекта")
+def list_object_levels(object_id: str, db: DbSession):
+    service = ReferenceService(db)
+    return service.list_object_levels(object_id)
+
+
+@objects_router.get("/{object_id}/structure", summary="Структура объекта")
+def get_object_structure(object_id: str, db: DbSession):
+    service = ReferenceService(db)
+    return service.get_object_structure(object_id)
+
+
+@objects_router.post("/{object_id}/levels", summary="Создать уровень объекта")
+def create_object_level(object_id: str, payload: ObjectLevelCreate, db: DbSession):
+    service = ReferenceService(db)
+    try:
+        return service.create_object_level(object_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @persons_router.get("", summary="Список лиц")
@@ -91,6 +117,48 @@ def list_internal_departments(db: DbSession):
 def create_employee(payload: EmployeeCreate, db: DbSession):
     service = ReferenceService(db)
     return service.create_employee(payload)
+
+
+@contracts_router.get("", summary="Список договоров")
+def list_contracts(db: DbSession):
+    service = ReferenceService(db)
+    return service.list_contracts()
+
+
+@contracts_router.get("/{contract_id}", summary="Получить договор по ID")
+def get_contract(contract_id: str, db: DbSession):
+    service = ReferenceService(db)
+    data = service.get_contract(contract_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Договор не найден")
+    return data
+
+
+@contracts_router.post("", summary="Создать договор")
+def create_contract(payload: ContractCreate, db: DbSession):
+    service = ReferenceService(db)
+    return service.create_contract(payload)
+
+
+@work_types_router.get("", summary="Список видов работ")
+def list_work_types(db: DbSession):
+    service = ReferenceService(db)
+    return service.list_work_types()
+
+
+@work_types_router.get("/{work_type_id}", summary="Получить вид работ по ID")
+def get_work_type(work_type_id: str, db: DbSession):
+    service = ReferenceService(db)
+    data = service.get_work_type(work_type_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Вид работ не найден")
+    return data
+
+
+@work_types_router.post("", summary="Создать вид работ")
+def create_work_type(payload: WorkTypeCreate, db: DbSession):
+    service = ReferenceService(db)
+    return service.create_work_type(payload)
 
 
 @counterparties_router.get("", summary="Список контрагентов")
@@ -217,4 +285,6 @@ reference_router = APIRouter()
 reference_router.include_router(objects_router)
 reference_router.include_router(persons_router)
 reference_router.include_router(employees_router)
+reference_router.include_router(contracts_router)
+reference_router.include_router(work_types_router)
 reference_router.include_router(counterparties_router)

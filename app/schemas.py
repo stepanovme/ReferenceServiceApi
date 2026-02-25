@@ -119,3 +119,27 @@ class BankAccountCreate(BaseModel):
     account_name: str
     is_treasury: bool = False
     is_main: bool
+
+
+class ContractCreate(BaseModel):
+    id: Optional[str] = None
+    contract_id: Optional[str] = None
+    name: str
+
+
+class WorkTypeCreate(BaseModel):
+    id: Optional[str] = None
+    name: str
+
+
+class ObjectLevelCreate(BaseModel):
+    id: Optional[str] = None
+    object_id: Optional[str] = None
+    name: Optional[str] = None
+    level_type: str = Field(..., description="section, agreement, worktype")
+    level_number: int
+    is_active: bool = True
+    work_type: Optional[str] = None
+    contract_id: Optional[str] = None
+    parent_id: Optional[str] = None
+    created_at: Optional[datetime] = None
