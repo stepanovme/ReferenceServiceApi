@@ -62,7 +62,10 @@ def list_object_levels(object_id: str, db: DbSession):
 @objects_router.get("/{object_id}/structure", summary="Структура объекта")
 def get_object_structure(object_id: str, db: DbSession):
     service = ReferenceService(db)
-    return service.get_object_structure(object_id)
+    data = service.get_object_structure(object_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Объект не найден")
+    return data
 
 
 @objects_router.post("/{object_id}/levels", summary="Создать уровень объекта")

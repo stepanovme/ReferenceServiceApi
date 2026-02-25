@@ -135,10 +135,11 @@ class ReferenceService:
         ]
 
     def get_object_structure(self, object_id: str):
-        levels = self.list_object_levels(object_id)
-        if not levels:
-            return []
+        obj = self.get_object(object_id)
+        if not obj:
+            return None
 
+        levels = self.list_object_levels(object_id)
         nodes = {}
         for item in levels:
             node = dict(item)
@@ -154,7 +155,17 @@ class ReferenceService:
             else:
                 roots.append(node)
 
-        return roots
+        return {
+            "id": obj["id"],
+            "short_name": obj["short_name"],
+            "full_name": obj["full_name"],
+            "address": obj["address"],
+            "is_active": obj["is_active"],
+            "manager": obj["manager"],
+            "created_at": obj["created_at"],
+            "updated_at": obj["updated_at"],
+            "children": roots,
+        }
 
     def list_counterparties(self, counterparty_type: str | None, is_internal: bool | None):
         query = self.db.query(CounterpartyDB)
@@ -919,6 +930,8 @@ class ReferenceService:
         if not rows:
             return []
 
+        counterparty_ids = {internal_employee.counterparty_id for internal_employee, _ in rows}
+
         user_ids = {internal_employee.user_id for internal_employee, _ in rows}
         if user_ids:
             query = text(
@@ -934,6 +947,36 @@ class ReferenceService:
 
         users_by_id = {row[0]: row for row in user_rows}
 
+        llc_details = (
+            self.db.query(DetailsLLCDB)
+            .filter(DetailsLLCDB.counterparties_id.in_(counterparty_ids))
+            .all()
+        )
+        llc_by_counterparty = {item.counterparties_id: item for item in llc_details}
+
+        director_person_ids = {
+            item.director_person_id for item in llc_details if item.director_person_id
+        }
+        director_persons = (
+            self.db.query(PersonDB).filter(PersonDB.id.in_(director_person_ids)).all()
+            if director_person_ids
+            else []
+        )
+        director_persons_by_id = {person.id: person for person in director_persons}
+
+        director_employees = (
+            self.db.query(EmployeeDB)
+            .filter(EmployeeDB.counterparty_id.in_(counterparty_ids))
+            .filter(EmployeeDB.person_id.in_(director_person_ids))
+            .all()
+            if director_person_ids
+            else []
+        )
+        director_positions = {
+            (employee.counterparty_id, employee.person_id): employee.position
+            for employee in director_employees
+        }
+
         grouped: dict[str, list[dict]] = {}
         for internal_employee, counterparty in rows:
             user = users_by_id.get(internal_employee.user_id)
@@ -943,6 +986,17 @@ class ReferenceService:
                 parts = [surname, name, patronymic]
                 full_name = " ".join(part for part in parts if part)
 
+            director = None
+            director_position = None
+            llc = llc_by_counterparty.get(counterparty.id)
+            if llc and llc.director_person_id:
+                director_person = director_persons_by_id.get(llc.director_person_id)
+                if director_person:
+                    director = _full_name(director_person)
+                director_position = director_positions.get(
+                    (counterparty.id, llc.director_person_id)
+                ) or llc.director_basis
+
             department = internal_employee.department or "Без отдела"
             grouped.setdefault(department, []).append(
                 {
@@ -951,6 +1005,8 @@ class ReferenceService:
                     "company": counterparty.short_name,
                     "position": internal_employee.position,
                     "department": internal_employee.department,
+                    "director": director,
+                    "director_position": director_position,
                 }
             )
 
