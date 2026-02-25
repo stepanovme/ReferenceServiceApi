@@ -585,6 +585,33 @@ class ReferenceService:
             for employee, person in rows
         ]
 
+    def list_employees(self):
+        rows = (
+            self.db.query(EmployeeDB, PersonDB, CounterpartyDB)
+            .join(PersonDB, EmployeeDB.person_id == PersonDB.id)
+            .join(CounterpartyDB, EmployeeDB.counterparty_id == CounterpartyDB.id)
+            .all()
+        )
+        return [
+            {
+                "id": employee.id,
+                "counterparty_id": counterparty.id,
+                "counterparty_name": counterparty.short_name,
+                "person_id": person.id,
+                "name": person.name,
+                "last_name": person.last_naem,
+                "middle_name": person.middle_name,
+                "position": employee.position,
+                "role": employee.role_type,
+                "phone_work": employee.phone_work,
+                "phone_extra": employee.phone_extra,
+                "email_work": employee.email_work,
+                "email_extra": employee.email_extra,
+                "comment": employee.comment,
+            }
+            for employee, person, counterparty in rows
+        ]
+
     def list_objects_by_employee(self, employee_id: str):
         objects = self.db.query(ObjectDB).filter(ObjectDB.manager_id == employee_id).all()
         return [

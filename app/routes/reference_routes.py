@@ -108,6 +108,12 @@ def create_person(payload: PersonCreate, db: DbSession):
     return service.create_person(payload)
 
 
+@employees_router.get("", summary="Список сотрудников")
+def list_employees(db: DbSession):
+    service = ReferenceService(db)
+    return service.list_employees()
+
+
 @employees_router.get("/{employee_id}/objects", summary="Объекты менеджера")
 def get_employee_objects(employee_id: str, db: DbSession):
     service = ReferenceService(db)
