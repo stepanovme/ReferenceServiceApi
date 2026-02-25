@@ -51,13 +51,19 @@ def get_object(object_id: str, db: DbSession):
 @objects_router.post("", summary="Создать объект")
 def create_object(payload: ObjectCreate, db: DbSession):
     service = ReferenceService(db)
-    return service.create_object(payload)
+    try:
+        return service.create_object(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @objects_router.patch("/{object_id}", summary="Редактировать объект")
 def update_object(object_id: str, payload: ObjectUpdate, db: DbSession):
     service = ReferenceService(db)
-    data = service.update_object(object_id, payload)
+    try:
+        data = service.update_object(object_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not data:
         raise HTTPException(status_code=404, detail="Объект не найден")
     return data

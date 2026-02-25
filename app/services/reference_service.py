@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import bindparam, or_, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.reference import (
@@ -46,6 +47,13 @@ def _full_name(person: PersonDB) -> str:
 class ReferenceService:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def _validate_manager_id(self, manager_id: str | None):
+        if manager_id is None:
+            return
+        exists = self.db.query(EmployeeDB.id).filter(EmployeeDB.id == manager_id).first()
+        if not exists:
+            raise ValueError("manager_id не найден в таблице employees")
 
     def list_objects(self):
         rows = (
@@ -770,9 +778,14 @@ class ReferenceService:
         data = payload.model_dump(exclude_none=True)
         data.setdefault("id", str(uuid.uuid4()))
         data.setdefault("created_at", datetime.utcnow())
+        self._validate_manager_id(data.get("manager_id"))
         obj = ObjectDB(**data)
         self.db.add(obj)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise ValueError("Некорректные данные объекта (проверьте внешние ключи)")
         self.db.refresh(obj)
         return self.get_object(obj.id)
 
@@ -788,10 +801,16 @@ class ReferenceService:
         if "updated_at" not in data:
             data["updated_at"] = datetime.utcnow()
 
+        self._validate_manager_id(data.get("manager_id"))
+
         for field, value in data.items():
             setattr(obj, field, value)
 
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise ValueError("Некорректные данные объекта (проверьте внешние ключи)")
         self.db.refresh(obj)
         return self.get_object(object_id)
 
