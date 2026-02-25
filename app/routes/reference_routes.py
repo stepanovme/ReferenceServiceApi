@@ -13,6 +13,7 @@ from app.schemas import (
     EmployeeCreate,
     ObjectLevelCreate,
     ObjectCreate,
+    ObjectUpdate,
     PersonCreate,
     WorkTypeCreate,
 )
@@ -51,6 +52,15 @@ def get_object(object_id: str, db: DbSession):
 def create_object(payload: ObjectCreate, db: DbSession):
     service = ReferenceService(db)
     return service.create_object(payload)
+
+
+@objects_router.patch("/{object_id}", summary="Редактировать объект")
+def update_object(object_id: str, payload: ObjectUpdate, db: DbSession):
+    service = ReferenceService(db)
+    data = service.update_object(object_id, payload)
+    if not data:
+        raise HTTPException(status_code=404, detail="Объект не найден")
+    return data
 
 
 @objects_router.get("/{object_id}/levels", summary="Список уровней объекта")

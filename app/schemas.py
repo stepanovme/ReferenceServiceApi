@@ -17,6 +17,15 @@ class ObjectCreate(BaseModel):
     updated_at: Optional[datetime] = None
 
 
+class ObjectUpdate(BaseModel):
+    short_name: Optional[str] = None
+    full_name: Optional[str] = None
+    address: Optional[str] = None
+    is_active: Optional[bool] = None
+    manager_id: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
 class CounterpartyCreate(BaseModel):
     id: Optional[str] = None
     type: str = Field(..., description="LLC, IP, PHYSIC")

@@ -32,6 +32,7 @@ from app.schemas import (
     EmployeeCreate,
     ObjectLevelCreate,
     ObjectCreate,
+    ObjectUpdate,
     PersonCreate,
     WorkTypeCreate,
 )
@@ -747,6 +748,25 @@ class ReferenceService:
         self.db.commit()
         self.db.refresh(obj)
         return self.get_object(obj.id)
+
+    def update_object(self, object_id: str, payload: ObjectUpdate):
+        obj = self.db.query(ObjectDB).filter(ObjectDB.id == object_id).first()
+        if not obj:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            return self.get_object(object_id)
+
+        if "updated_at" not in data:
+            data["updated_at"] = datetime.utcnow()
+
+        for field, value in data.items():
+            setattr(obj, field, value)
+
+        self.db.commit()
+        self.db.refresh(obj)
+        return self.get_object(object_id)
 
     def create_counterparty(self, payload: CounterpartyCreate):
         data = payload.model_dump(exclude_none=True)
