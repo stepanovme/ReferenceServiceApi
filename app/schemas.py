@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ObjectCreate(BaseModel):
@@ -94,6 +94,13 @@ class DetailsPhysCreate(BaseModel):
     address_living: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def empty_strings_to_none(cls, value):
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
 
 
 class PersonCreate(BaseModel):
