@@ -81,17 +81,19 @@ class DetailsIPCreate(BaseModel):
 
 
 class DetailsPhysCreate(BaseModel):
-    counterparty_id: str
-    person_id: str
-    passport_series: str
-    passport_number: str
-    passport_issued_by: str
-    passport_date_issued: date
-    passport_date: date
-    department_code: str
+    counterparty_id: Optional[str] = None
+    person_id: Optional[str] = None
+    passport_series: Optional[str] = None
+    passport_number: Optional[str] = None
+    passport_issued_by: Optional[str] = None
+    passport_date_issued: Optional[date] = None
+    passport_date: Optional[date] = None
+    department_code: Optional[str] = None
     inn: Optional[str] = None
-    address_registration: str
-    address_living: str
+    address_registration: Optional[str] = None
+    address_living: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
 
 
 class PersonCreate(BaseModel):

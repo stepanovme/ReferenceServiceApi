@@ -84,15 +84,17 @@ class DetailsPhysDB(Base):
 
     counterparty_id = Column(CHAR(36), primary_key=True)
     person_id = Column(CHAR(36), primary_key=True)
-    passport_series = Column(String(200), nullable=False)
-    passport_number = Column(String(200), nullable=False)
-    passport_issued_by = Column(Text, nullable=False)
-    passport_date_issued = Column(Date, nullable=False)
-    passport_date = Column(Date, nullable=False)
-    department_code = Column(String(7), nullable=False)
+    passport_series = Column(String(200))
+    passport_number = Column(String(200))
+    passport_issued_by = Column(Text)
+    passport_date_issued = Column(Date)
+    passport_date = Column(Date)
+    department_code = Column(String(7))
     inn = Column(String(200))
-    address_registration = Column(Text, nullable=False)
-    address_living = Column(Text, nullable=False)
+    address_registration = Column(Text)
+    address_living = Column(Text)
+    phone = Column(String(18))
+    email = Column(String(200))
 
 
 class EmployeeDB(Base):

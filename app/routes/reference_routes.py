@@ -285,7 +285,10 @@ def create_ip(payload: DetailsIPCreate, db: DbSession):
 @counterparties_router.post("/phys", summary="Создать данные физлица")
 def create_phys(payload: DetailsPhysCreate, db: DbSession):
     service = ReferenceService(db)
-    return service.create_details_phys(payload)
+    try:
+        return service.create_details_phys(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @counterparties_router.post(

@@ -399,8 +399,8 @@ class ReferenceService:
                 "last_name": person.last_naem,
                 "middle_name": person.middle_name,
                 "birth_date": person.birth_date,
-                "phone": person.phone_personal,
-                "email": person.email_personal,
+                "phone": details.phone or person.phone_personal,
+                "email": details.email or person.email_personal,
             },
             "passport": {
                 "series": details.passport_series,
@@ -756,6 +756,11 @@ class ReferenceService:
                     person_id = details.person_id
 
             phone, email = pick_contact(cp.id, person_id)
+            if cp.type == "PHYSIC":
+                details = phys_by_id.get(cp.id)
+                if details:
+                    phone = details.phone or phone
+                    email = details.email or email
             inn_ogrn_kpp = "/".join(
                 [inn or "-", ogrn or "-", kpp or "-"]
             )
@@ -855,13 +860,20 @@ class ReferenceService:
         }
 
     def create_details_phys(self, payload: DetailsPhysCreate):
-        details = DetailsPhysDB(**payload.model_dump())
+        data = payload.model_dump(exclude_none=True)
+        details = DetailsPhysDB(**data)
         self.db.add(details)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise ValueError("Некорректные данные физлица")
         self.db.refresh(details)
         return {
             "counterparty_id": details.counterparty_id,
             "person_id": details.person_id,
+            "phone": details.phone,
+            "email": details.email,
         }
 
     def create_counterparty_additional(self, payload: CounterpartyAdditionalCreate):
