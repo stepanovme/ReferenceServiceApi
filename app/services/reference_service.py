@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+import re
+from difflib import SequenceMatcher
 
 from sqlalchemy import bindparam, or_, text
 from sqlalchemy.exc import IntegrityError
@@ -95,6 +97,89 @@ class ReferenceService:
             "email_extra": employee.email_extra,
             "comment": employee.comment,
         }
+
+    def _normalize_text(self, value: str | None) -> str:
+        if not value:
+            return ""
+        text_value = value.casefold().replace("ё", "е")
+        text_value = re.sub(r"[^0-9a-zа-я]+", " ", text_value)
+        return re.sub(r"\s+", " ", text_value).strip()
+
+    def _normalize_phone_digits(self, value: str | None) -> str:
+        if not value:
+            return ""
+        return re.sub(r"\D+", "", value)
+
+    def _phone_aliases(self, digits: str) -> set[str]:
+        aliases = {digits}
+        if len(digits) == 11 and digits.startswith(("7", "8")):
+            aliases.add(("8" if digits[0] == "7" else "7") + digits[1:])
+            aliases.add(digits[-10:])
+        elif len(digits) == 10:
+            aliases.add("7" + digits)
+            aliases.add("8" + digits)
+        return {alias for alias in aliases if alias}
+
+    def _token_matches(self, haystack_text: str, token: str) -> bool:
+        if token in haystack_text:
+            return True
+        if len(token) < 4:
+            return False
+        haystack_words = haystack_text.split()
+        return any(SequenceMatcher(None, token, word).ratio() >= 0.82 for word in haystack_words)
+
+    def _employee_matches_search(self, employee_payload: dict, search: str | None) -> bool:
+        if not search:
+            return True
+
+        normalized_search = self._normalize_text(search)
+        search_tokens = [token for token in normalized_search.split() if token]
+        search_digits = self._normalize_phone_digits(search)
+
+        haystack_text = self._normalize_text(
+            " ".join(
+                str(value or "")
+                for value in [
+                    employee_payload.get("name"),
+                    employee_payload.get("last_name"),
+                    employee_payload.get("middle_name"),
+                    employee_payload.get("full_name"),
+                    employee_payload.get("position"),
+                    employee_payload.get("role"),
+                    employee_payload.get("phone_personal"),
+                    employee_payload.get("phone_work"),
+                    employee_payload.get("phone_extra"),
+                    employee_payload.get("email_personal"),
+                    employee_payload.get("email_work"),
+                    employee_payload.get("email_extra"),
+                    employee_payload.get("comment"),
+                    employee_payload.get("counterparty_name"),
+                ]
+            )
+        )
+
+        if search_tokens and not all(self._token_matches(haystack_text, token) for token in search_tokens):
+            return False
+
+        if search_digits:
+            haystack_digits = self._normalize_phone_digits(
+                " ".join(
+                    str(value or "")
+                    for value in [
+                        employee_payload.get("phone_personal"),
+                        employee_payload.get("phone_work"),
+                        employee_payload.get("phone_extra"),
+                    ]
+                )
+            )
+            search_aliases = self._phone_aliases(search_digits)
+            haystack_aliases = self._phone_aliases(haystack_digits)
+            if not any(alias in haystack_digits for alias in search_aliases) and not any(
+                alias in search_digits for alias in haystack_aliases
+            ):
+                return False
+
+        return True
 
     def list_objects(self):
         rows = (
@@ -623,51 +708,25 @@ class ReferenceService:
         return [self._employee_payload(employee, person, counterparty) for employee, person, counterparty in rows]
 
     def list_employees(self, search: str | None = None):
-        query = (
+        rows = (
             self.db.query(EmployeeDB, PersonDB, CounterpartyDB)
             .join(PersonDB, EmployeeDB.person_id == PersonDB.id)
             .join(CounterpartyDB, EmployeeDB.counterparty_id == CounterpartyDB.id)
+            .all()
         )
-        if search:
-            pattern = f"%{search}%"
-            query = query.filter(
-                or_(
-                    PersonDB.name.ilike(pattern),
-                    PersonDB.last_naem.ilike(pattern),
-                    PersonDB.middle_name.ilike(pattern),
-                    EmployeeDB.phone_work.ilike(pattern),
-                    EmployeeDB.phone_extra.ilike(pattern),
-                    EmployeeDB.email_work.ilike(pattern),
-                    EmployeeDB.email_extra.ilike(pattern),
-                    EmployeeDB.comment.ilike(pattern),
-                )
-            )
-        rows = query.all()
-        return [self._employee_payload(employee, person, counterparty) for employee, person, counterparty in rows]
+        employees = [self._employee_payload(employee, person, counterparty) for employee, person, counterparty in rows]
+        return [employee for employee in employees if self._employee_matches_search(employee, search)]
 
     def list_employees_by_counterparty(self, counterparty_id: str, search: str | None = None):
-        query = (
+        rows = (
             self.db.query(EmployeeDB, PersonDB, CounterpartyDB)
             .join(PersonDB, EmployeeDB.person_id == PersonDB.id)
             .join(CounterpartyDB, EmployeeDB.counterparty_id == CounterpartyDB.id)
             .filter(EmployeeDB.counterparty_id == counterparty_id)
+            .all()
         )
-        if search:
-            pattern = f"%{search}%"
-            query = query.filter(
-                or_(
-                    PersonDB.name.ilike(pattern),
-                    PersonDB.last_naem.ilike(pattern),
-                    PersonDB.middle_name.ilike(pattern),
-                    EmployeeDB.phone_work.ilike(pattern),
-                    EmployeeDB.phone_extra.ilike(pattern),
-                    EmployeeDB.email_work.ilike(pattern),
-                    EmployeeDB.email_extra.ilike(pattern),
-                    EmployeeDB.comment.ilike(pattern),
-                )
-            )
-        rows = query.all()
-        return [self._employee_payload(employee, person, counterparty) for employee, person, counterparty in rows]
+        employees = [self._employee_payload(employee, person, counterparty) for employee, person, counterparty in rows]
+        return [employee for employee in employees if self._employee_matches_search(employee, search)]
 
     def list_objects_by_employee(self, employee_id: str):
         objects = self.db.query(ObjectDB).filter(ObjectDB.manager_id == employee_id).all()
