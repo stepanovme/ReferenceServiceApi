@@ -127,6 +127,18 @@ class EmployeeCreate(BaseModel):
     comment: Optional[str] = None
 
 
+class EmployeeUpdate(BaseModel):
+    counterparty_id: Optional[str] = None
+    person_id: Optional[str] = None
+    position: Optional[str] = None
+    phone_work: Optional[str] = None
+    phone_extra: Optional[str] = None
+    email_work: Optional[str] = None
+    email_extra: Optional[str] = None
+    role_type: Optional[str] = None
+    comment: Optional[str] = None
+
+
 class BankAccountCreate(BaseModel):
     id: Optional[str] = None
     counterparty_id: str

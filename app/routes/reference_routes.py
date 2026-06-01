@@ -11,6 +11,7 @@ from app.schemas import (
     DetailsLLCCreate,
     DetailsPhysCreate,
     EmployeeCreate,
+    EmployeeUpdate,
     ObjectLevelCreate,
     ObjectCreate,
     ObjectUpdate,
@@ -115,9 +116,27 @@ def create_person(payload: PersonCreate, db: DbSession):
 
 
 @employees_router.get("", summary="Список сотрудников")
-def list_employees(db: DbSession):
+def list_employees(db: DbSession, search: str | None = None):
     service = ReferenceService(db)
-    return service.list_employees()
+    return service.list_employees(search)
+
+
+@employees_router.get("/counterparty/{counterparty_id}", summary="Сотрудники по контрагенту")
+def list_employees_by_counterparty(counterparty_id: str, db: DbSession, search: str | None = None):
+    service = ReferenceService(db)
+    return service.list_employees_by_counterparty(counterparty_id, search)
+
+
+@employees_router.patch("/{employee_id}", summary="Редактировать сотрудника")
+def update_employee(employee_id: str, payload: EmployeeUpdate, db: DbSession):
+    service = ReferenceService(db)
+    try:
+        data = service.update_employee(employee_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not data:
+        raise HTTPException(status_code=404, detail="Сотрудник не найден")
+    return data
 
 
 @employees_router.get("/{employee_id}/objects", summary="Объекты менеджера")
@@ -141,7 +160,10 @@ def list_internal_departments(db: DbSession):
 @employees_router.post("", summary="Создать сотрудника")
 def create_employee(payload: EmployeeCreate, db: DbSession):
     service = ReferenceService(db)
-    return service.create_employee(payload)
+    try:
+        return service.create_employee(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @contracts_router.get("", summary="Список договоров")

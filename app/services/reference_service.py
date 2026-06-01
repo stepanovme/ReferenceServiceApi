@@ -31,6 +31,7 @@ from app.schemas import (
     DetailsLLCCreate,
     DetailsPhysCreate,
     EmployeeCreate,
+    EmployeeUpdate,
     ObjectLevelCreate,
     ObjectCreate,
     ObjectUpdate,
@@ -54,6 +55,46 @@ class ReferenceService:
         exists = self.db.query(EmployeeDB.id).filter(EmployeeDB.id == manager_id).first()
         if not exists:
             raise ValueError("manager_id не найден в таблице employees")
+
+    def _validate_employee_refs(
+        self,
+        counterparty_id: str | None = None,
+        person_id: str | None = None,
+    ):
+        if counterparty_id is not None:
+            exists = (
+                self.db.query(CounterpartyDB.id)
+                .filter(CounterpartyDB.id == counterparty_id)
+                .first()
+            )
+            if not exists:
+                raise ValueError("counterparty_id не найден в таблице counterparties")
+
+        if person_id is not None:
+            exists = self.db.query(PersonDB.id).filter(PersonDB.id == person_id).first()
+            if not exists:
+                raise ValueError("person_id не найден в таблице persons")
+
+    def _employee_payload(self, employee: EmployeeDB, person: PersonDB, counterparty: CounterpartyDB):
+        return {
+            "id": employee.id,
+            "counterparty_id": counterparty.id,
+            "counterparty_name": counterparty.short_name,
+            "person_id": person.id,
+            "name": person.name,
+            "last_name": person.last_naem,
+            "middle_name": person.middle_name,
+            "full_name": _full_name(person),
+            "phone_personal": person.phone_personal,
+            "email_personal": person.email_personal,
+            "position": employee.position,
+            "role": employee.role_type,
+            "phone_work": employee.phone_work,
+            "phone_extra": employee.phone_extra,
+            "email_work": employee.email_work,
+            "email_extra": employee.email_extra,
+            "comment": employee.comment,
+        }
 
     def list_objects(self):
         rows = (
@@ -573,52 +614,60 @@ class ReferenceService:
 
     def list_counterparty_employees(self, counterparty_id: str):
         rows = (
-            self.db.query(EmployeeDB, PersonDB)
-            .join(PersonDB, EmployeeDB.person_id == PersonDB.id)
-            .filter(EmployeeDB.counterparty_id == counterparty_id)
-            .all()
-        )
-        return [
-            {
-                "id": employee.id,
-                "person_id": person.id,
-                "name": person.name,
-                "last_name": person.last_naem,
-                "middle_name": person.middle_name,
-                "position": employee.position,
-                "role": employee.role_type,
-                "phone_work": employee.phone_work,
-                "email_work": employee.email_work,
-            }
-            for employee, person in rows
-        ]
-
-    def list_employees(self):
-        rows = (
             self.db.query(EmployeeDB, PersonDB, CounterpartyDB)
             .join(PersonDB, EmployeeDB.person_id == PersonDB.id)
             .join(CounterpartyDB, EmployeeDB.counterparty_id == CounterpartyDB.id)
+            .filter(EmployeeDB.counterparty_id == counterparty_id)
             .all()
         )
-        return [
-            {
-                "id": employee.id,
-                "counterparty_id": counterparty.id,
-                "counterparty_name": counterparty.short_name,
-                "person_id": person.id,
-                "name": person.name,
-                "last_name": person.last_naem,
-                "middle_name": person.middle_name,
-                "position": employee.position,
-                "role": employee.role_type,
-                "phone_work": employee.phone_work,
-                "phone_extra": employee.phone_extra,
-                "email_work": employee.email_work,
-                "email_extra": employee.email_extra,
-                "comment": employee.comment,
-            }
-            for employee, person, counterparty in rows
-        ]
+        return [self._employee_payload(employee, person, counterparty) for employee, person, counterparty in rows]
+
+    def list_employees(self, search: str | None = None):
+        query = (
+            self.db.query(EmployeeDB, PersonDB, CounterpartyDB)
+            .join(PersonDB, EmployeeDB.person_id == PersonDB.id)
+            .join(CounterpartyDB, EmployeeDB.counterparty_id == CounterpartyDB.id)
+        )
+        if search:
+            pattern = f"%{search}%"
+            query = query.filter(
+                or_(
+                    PersonDB.name.ilike(pattern),
+                    PersonDB.last_naem.ilike(pattern),
+                    PersonDB.middle_name.ilike(pattern),
+                    EmployeeDB.phone_work.ilike(pattern),
+                    EmployeeDB.phone_extra.ilike(pattern),
+                    EmployeeDB.email_work.ilike(pattern),
+                    EmployeeDB.email_extra.ilike(pattern),
+                    EmployeeDB.comment.ilike(pattern),
+                )
+            )
+        rows = query.all()
+        return [self._employee_payload(employee, person, counterparty) for employee, person, counterparty in rows]
+
+    def list_employees_by_counterparty(self, counterparty_id: str, search: str | None = None):
+        query = (
+            self.db.query(EmployeeDB, PersonDB, CounterpartyDB)
+            .join(PersonDB, EmployeeDB.person_id == PersonDB.id)
+            .join(CounterpartyDB, EmployeeDB.counterparty_id == CounterpartyDB.id)
+            .filter(EmployeeDB.counterparty_id == counterparty_id)
+        )
+        if search:
+            pattern = f"%{search}%"
+            query = query.filter(
+                or_(
+                    PersonDB.name.ilike(pattern),
+                    PersonDB.last_naem.ilike(pattern),
+                    PersonDB.middle_name.ilike(pattern),
+                    EmployeeDB.phone_work.ilike(pattern),
+                    EmployeeDB.phone_extra.ilike(pattern),
+                    EmployeeDB.email_work.ilike(pattern),
+                    EmployeeDB.email_extra.ilike(pattern),
+                    EmployeeDB.comment.ilike(pattern),
+                )
+            )
+        rows = query.all()
+        return [self._employee_payload(employee, person, counterparty) for employee, person, counterparty in rows]
 
     def list_objects_by_employee(self, employee_id: str):
         objects = self.db.query(ObjectDB).filter(ObjectDB.manager_id == employee_id).all()
@@ -897,9 +946,17 @@ class ReferenceService:
     def create_employee(self, payload: EmployeeCreate):
         data = payload.model_dump(exclude_none=True)
         data.setdefault("id", str(uuid.uuid4()))
+        self._validate_employee_refs(
+            counterparty_id=data.get("counterparty_id"),
+            person_id=data.get("person_id"),
+        )
         employee = EmployeeDB(**data)
         self.db.add(employee)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise ValueError("Некорректные данные сотрудника")
         self.db.refresh(employee)
         return {
             "id": employee.id,
@@ -910,6 +967,44 @@ class ReferenceService:
             "email_work": employee.email_work,
             "role": employee.role_type,
         }
+
+    def update_employee(self, employee_id: str, payload: EmployeeUpdate):
+        employee = self.db.query(EmployeeDB).filter(EmployeeDB.id == employee_id).first()
+        if not employee:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            person = self.db.query(PersonDB).filter(PersonDB.id == employee.person_id).first()
+            counterparty = (
+                self.db.query(CounterpartyDB)
+                .filter(CounterpartyDB.id == employee.counterparty_id)
+                .first()
+            )
+            return self._employee_payload(employee, person, counterparty)
+
+        self._validate_employee_refs(
+            counterparty_id=data.get("counterparty_id"),
+            person_id=data.get("person_id"),
+        )
+
+        for field, value in data.items():
+            setattr(employee, field, value)
+
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise ValueError("Некорректные данные сотрудника")
+
+        self.db.refresh(employee)
+        person = self.db.query(PersonDB).filter(PersonDB.id == employee.person_id).first()
+        counterparty = (
+            self.db.query(CounterpartyDB)
+            .filter(CounterpartyDB.id == employee.counterparty_id)
+            .first()
+        )
+        return self._employee_payload(employee, person, counterparty)
 
     def create_bank_account(self, payload: BankAccountCreate):
         data = payload.model_dump(exclude_none=True)
