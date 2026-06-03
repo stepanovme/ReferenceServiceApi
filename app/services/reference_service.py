@@ -7,7 +7,7 @@ from difflib import SequenceMatcher
 
 from sqlalchemy import bindparam, or_, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.models.reference import (
     BankAccountDB,
@@ -300,6 +300,74 @@ class ReferenceService:
             "created_at": obj["created_at"],
             "updated_at": obj["updated_at"],
             "children": roots,
+        }
+
+    def get_object_level(self, level_id: str):
+        ParentLevel = aliased(ObjectLevelDB)
+        row = (
+            self.db.query(ObjectLevelDB, ObjectDB, ContractDB, WorkTypeDB, ParentLevel)
+            .join(ObjectDB, ObjectLevelDB.object_id == ObjectDB.id)
+            .outerjoin(ContractDB, ObjectLevelDB.contract_id == ContractDB.id)
+            .outerjoin(WorkTypeDB, ObjectLevelDB.work_type == WorkTypeDB.id)
+            .outerjoin(ParentLevel, ObjectLevelDB.parent_id == ParentLevel.id)
+            .filter(ObjectLevelDB.id == level_id)
+            .first()
+        )
+        if not row:
+            return None
+
+        level, obj, contract, work_type, parent = row
+        children_rows = (
+            self.db.query(ObjectLevelDB, ContractDB, WorkTypeDB)
+            .outerjoin(ContractDB, ObjectLevelDB.contract_id == ContractDB.id)
+            .outerjoin(WorkTypeDB, ObjectLevelDB.work_type == WorkTypeDB.id)
+            .filter(ObjectLevelDB.parent_id == level.id)
+            .order_by(ObjectLevelDB.level_number, ObjectLevelDB.created_at)
+            .all()
+        )
+
+        return {
+            "id": level.id,
+            "object": {
+                "id": obj.id,
+                "short_name": obj.short_name,
+                "full_name": obj.full_name,
+                "address": obj.address,
+                "is_active": bool(obj.is_active),
+                "created_at": obj.created_at,
+                "updated_at": obj.updated_at,
+            },
+            "level": {
+                "object_id": level.object_id,
+                "name": level.name,
+                "level_type": level.level_type,
+                "level_number": level.level_number,
+                "is_active": bool(level.is_active),
+                "work_type_id": level.work_type,
+                "work_type_name": work_type.name if work_type else None,
+                "contract_id": level.contract_id,
+                "contract_name": contract.name if contract else None,
+                "parent_id": level.parent_id,
+                "parent_name": parent.name if parent else None,
+                "created_at": level.created_at,
+            },
+            "children": [
+                {
+                    "id": child.id,
+                    "object_id": child.object_id,
+                    "name": child.name,
+                    "level_type": child.level_type,
+                    "level_number": child.level_number,
+                    "is_active": bool(child.is_active),
+                    "work_type_id": child.work_type,
+                    "work_type_name": child_work_type.name if child_work_type else None,
+                    "contract_id": child.contract_id,
+                    "contract_name": child_contract.name if child_contract else None,
+                    "parent_id": child.parent_id,
+                    "created_at": child.created_at,
+                }
+                for child, child_contract, child_work_type in children_rows
+            ],
         }
 
     def list_counterparties(self, counterparty_type: str | None, is_internal: bool | None):
