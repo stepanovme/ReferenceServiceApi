@@ -20,11 +20,21 @@ AUTH_DB_URL = (
     f"/{os.getenv('AUTH_DB_NAME', os.getenv('DB_NAME'))}"
 )
 
+SUPPLY_DB_URL = (
+    f"mysql+pymysql://{os.getenv('SUPPLY_DB_USER', os.getenv('DB_USER'))}"
+    f":{os.getenv('SUPPLY_DB_PASSWORD', os.getenv('DB_PASSWORD'))}"
+    f"@{os.getenv('SUPPLY_DB_HOST', os.getenv('DB_HOST'))}"
+    f":{os.getenv('SUPPLY_DB_PORT', os.getenv('DB_PORT'))}"
+    f"/{os.getenv('SUPPLY_DB_NAME', os.getenv('DB_NAME'))}"
+)
+
 reference_engine = create_engine(REFERENCE_DB_URL)
 auth_engine = create_engine(AUTH_DB_URL)
+supply_engine = create_engine(SUPPLY_DB_URL)
 
 ReferenceSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=reference_engine)
 AuthSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=auth_engine)
+SupplySessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=supply_engine)
 
 
 class Base(DeclarativeBase):
@@ -47,9 +57,18 @@ def get_auth_db() -> Generator[Session, None, None]:  # pyright: ignore[reportIn
         db.close()
 
 
+def get_supply_db() -> Generator[Session, None, None]:  # pyright: ignore[reportInvalidTypeForm]
+    db = SupplySessionLocal()
+    try:
+        yield db  # pyright: ignore[reportReturnType]
+    finally:
+        db.close()
+
+
 def init_db():
     Base.metadata.create_all(bind=reference_engine)
 
 
 DbSession = Annotated[Session, Depends(get_db)]
 AuthDbSession = Annotated[Session, Depends(get_auth_db)]
+SupplyDbSession = Annotated[Session, Depends(get_supply_db)]

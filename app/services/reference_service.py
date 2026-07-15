@@ -77,6 +77,47 @@ class ReferenceService:
             if not exists:
                 raise ValueError("person_id не найден в таблице persons")
 
+    def _load_object_settings_templates(self, supply_db: Session):
+        rows = supply_db.execute(
+            text(
+                """
+                SELECT user_id, department_id, `role`
+                FROM object_settings_template
+                """
+            )
+        ).fetchall()
+        return [
+            {
+                "user_id": row.user_id,
+                "department_id": row.department_id,
+                "role": row.role,
+            }
+            for row in rows
+        ]
+
+    def _create_object_settings(self, supply_db: Session, object_id: str):
+        templates = self._load_object_settings_templates(supply_db)
+        if not templates:
+            return
+
+        supply_db.execute(
+            text(
+                """
+                INSERT INTO object_settings (object_id, user_id, department_id, `role`)
+                VALUES (:object_id, :user_id, :department_id, :role)
+                """
+            ),
+            [
+                {
+                    "object_id": object_id,
+                    "user_id": row["user_id"],
+                    "department_id": row["department_id"],
+                    "role": row["role"],
+                }
+                for row in templates
+            ],
+        )
+
     def _employee_payload(self, employee: EmployeeDB, person: PersonDB, counterparty: CounterpartyDB):
         return {
             "id": employee.id,
@@ -955,7 +996,7 @@ class ReferenceService:
 
         return result
 
-    def create_object(self, payload: ObjectCreate):
+    def create_object(self, payload: ObjectCreate, supply_db: Session):
         data = payload.model_dump(exclude_none=True)
         data.setdefault("id", str(uuid.uuid4()))
         data.setdefault("created_at", datetime.utcnow())
@@ -967,6 +1008,16 @@ class ReferenceService:
         except IntegrityError:
             self.db.rollback()
             raise ValueError("Некорректные данные объекта (проверьте внешние ключи)")
+
+        try:
+            self._create_object_settings(supply_db, obj.id)
+            supply_db.commit()
+        except IntegrityError:
+            supply_db.rollback()
+            self.db.delete(obj)
+            self.db.commit()
+            raise ValueError("Не удалось создать настройки объекта")
+
         self.db.refresh(obj)
         return self.get_object(obj.id)
 

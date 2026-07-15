@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.database import AuthDbSession, DbSession
+from app.database import AuthDbSession, DbSession, SupplyDbSession
 from app.middleware.auth_middleware import get_session
 from app.schemas import (
     BankAccountCreate,
@@ -50,10 +50,10 @@ def get_object(object_id: str, db: DbSession):
 
 
 @objects_router.post("", summary="Создать объект")
-def create_object(payload: ObjectCreate, db: DbSession):
+def create_object(payload: ObjectCreate, db: DbSession, supply_db: SupplyDbSession):
     service = ReferenceService(db)
     try:
-        return service.create_object(payload)
+        return service.create_object(payload, supply_db)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
