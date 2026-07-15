@@ -70,6 +70,18 @@ def update_object(object_id: str, payload: ObjectUpdate, db: DbSession):
     return data
 
 
+@objects_router.delete("/{object_id}", summary="Удалить объект")
+def delete_object(object_id: str, db: DbSession, supply_db: SupplyDbSession):
+    service = ReferenceService(db)
+    try:
+        data = service.delete_object(object_id, supply_db)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not data:
+        raise HTTPException(status_code=404, detail="Объект не найден")
+    return data
+
+
 @objects_router.get("/{object_id}/levels", summary="Список уровней объекта")
 def list_object_levels(object_id: str, db: DbSession):
     service = ReferenceService(db)

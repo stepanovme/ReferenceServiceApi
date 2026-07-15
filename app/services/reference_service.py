@@ -118,6 +118,52 @@ class ReferenceService:
             ],
         )
 
+    def _load_object_settings(self, supply_db: Session, object_id: str):
+        rows = supply_db.execute(
+            text(
+                """
+                SELECT user_id, department_id, `role`
+                FROM object_settings
+                WHERE object_id = :object_id
+                """
+            ),
+            {"object_id": object_id},
+        ).mappings().all()
+        return [dict(row) for row in rows]
+
+    def _delete_object_settings(self, supply_db: Session, object_id: str):
+        supply_db.execute(
+            text(
+                """
+                DELETE FROM object_settings
+                WHERE object_id = :object_id
+                """
+            ),
+            {"object_id": object_id},
+        )
+
+    def _restore_object_settings(self, supply_db: Session, object_id: str, settings: list[dict]):
+        if not settings:
+            return
+
+        supply_db.execute(
+            text(
+                """
+                INSERT INTO object_settings (object_id, user_id, department_id, `role`)
+                VALUES (:object_id, :user_id, :department_id, :role)
+                """
+            ),
+            [
+                {
+                    "object_id": object_id,
+                    "user_id": row["user_id"],
+                    "department_id": row["department_id"],
+                    "role": row["role"],
+                }
+                for row in settings
+            ],
+        )
+
     def _employee_payload(self, employee: EmployeeDB, person: PersonDB, counterparty: CounterpartyDB):
         return {
             "id": employee.id,
@@ -1045,6 +1091,34 @@ class ReferenceService:
             raise ValueError("Некорректные данные объекта (проверьте внешние ключи)")
         self.db.refresh(obj)
         return self.get_object(object_id)
+
+    def delete_object(self, object_id: str, supply_db: Session):
+        obj = self.db.query(ObjectDB).filter(ObjectDB.id == object_id).first()
+        if not obj:
+            return None
+
+        saved_settings = self._load_object_settings(supply_db, object_id)
+
+        try:
+            self._delete_object_settings(supply_db, object_id)
+            supply_db.commit()
+        except IntegrityError:
+            supply_db.rollback()
+            raise ValueError("Не удалось удалить настройки объекта")
+
+        self.db.delete(obj)
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            try:
+                self._restore_object_settings(supply_db, object_id, saved_settings)
+                supply_db.commit()
+            except IntegrityError:
+                supply_db.rollback()
+            raise ValueError("Не удалось удалить объект")
+
+        return {"deleted": True, "id": object_id}
 
     def create_counterparty(self, payload: CounterpartyCreate):
         data = payload.model_dump(exclude_none=True)
