@@ -26,18 +26,27 @@ from app.models.reference import (
 )
 from app.schemas import (
     BankAccountCreate,
+    BankAccountUpdate,
     ContractCreate,
+    ContractUpdate,
     CounterpartyAdditionalCreate,
+    CounterpartyAdditionalUpdate,
     CounterpartyCreate,
+    DetailsIPUpdate,
     DetailsIPCreate,
     DetailsLLCCreate,
+    DetailsLLCUpdate,
     DetailsPhysCreate,
+    DetailsPhysUpdate,
     EmployeeCreate,
     EmployeeUpdate,
     ObjectLevelCreate,
+    ObjectLevelUpdate,
     ObjectCreate,
     ObjectUpdate,
     PersonCreate,
+    PersonUpdate,
+    WorkTypeUpdate,
     WorkTypeCreate,
 )
 
@@ -76,6 +85,13 @@ class ReferenceService:
             exists = self.db.query(PersonDB.id).filter(PersonDB.id == person_id).first()
             if not exists:
                 raise ValueError("person_id не найден в таблице persons")
+
+    def _apply_patch_values(self, instance, data: dict, required_fields: set[str] | None = None):
+        required_fields = required_fields or set()
+        for field, value in data.items():
+            if value is None and field in required_fields:
+                continue
+            setattr(instance, field, value)
 
     def _load_object_settings_templates(self, supply_db: Session):
         rows = supply_db.execute(
@@ -1177,9 +1193,203 @@ class ReferenceService:
             "email": details.email,
         }
 
+    def update_details_llc(self, counterparty_id: str, payload: DetailsLLCUpdate):
+        counterparty = (
+            self.db.query(CounterpartyDB)
+            .filter(CounterpartyDB.id == counterparty_id, CounterpartyDB.type == "LLC")
+            .first()
+        )
+        details = (
+            self.db.query(DetailsLLCDB)
+            .filter(DetailsLLCDB.counterparties_id == counterparty_id)
+            .first()
+        )
+        if not counterparty or not details:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            return self.get_counterparty_llc(counterparty_id)
+
+        counterparty_fields = {"short_name", "full_name", "is_internal", "contract_prefix"}
+        detail_required_fields = {
+            "inn",
+            "kpp",
+            "ogrn",
+            "legal_address",
+            "actual_address",
+            "postal_address",
+            "director_person_id",
+        }
+
+        if "counterparties_id" in data and data["counterparties_id"] and data["counterparties_id"] != counterparty_id:
+            raise ValueError("counterparties_id не совпадает")
+
+        self._apply_patch_values(
+            counterparty,
+            {key: value for key, value in data.items() if key in counterparty_fields},
+            required_fields={"short_name", "full_name", "is_internal"},
+        )
+        self._apply_patch_values(
+            details,
+            {
+                key: value
+                for key, value in data.items()
+                if key not in counterparty_fields and key != "counterparties_id"
+            },
+            required_fields=detail_required_fields,
+        )
+
+        self.db.commit()
+        self.db.refresh(counterparty)
+        self.db.refresh(details)
+        return self.get_counterparty_llc(counterparty_id)
+
+    def update_details_ip(self, counterparty_id: str, payload: DetailsIPUpdate):
+        counterparty = (
+            self.db.query(CounterpartyDB)
+            .filter(CounterpartyDB.id == counterparty_id, CounterpartyDB.type == "IP")
+            .first()
+        )
+        details = (
+            self.db.query(DetailsIPDB)
+            .filter(DetailsIPDB.counterparty_id == counterparty_id)
+            .first()
+        )
+        if not counterparty or not details:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            return self.get_counterparty_ip(counterparty_id)
+
+        counterparty_fields = {"short_name", "full_name", "is_internal", "contract_prefix"}
+        detail_required_fields = {"inn", "person_id"}
+
+        if "counterparty_id" in data and data["counterparty_id"] and data["counterparty_id"] != counterparty_id:
+            raise ValueError("counterparty_id не совпадает")
+
+        self._apply_patch_values(
+            counterparty,
+            {key: value for key, value in data.items() if key in counterparty_fields},
+            required_fields={"short_name", "full_name", "is_internal"},
+        )
+        self._apply_patch_values(
+            details,
+            {
+                key: value
+                for key, value in data.items()
+                if key not in counterparty_fields and key != "counterparty_id"
+            },
+            required_fields=detail_required_fields,
+        )
+
+        self.db.commit()
+        self.db.refresh(counterparty)
+        self.db.refresh(details)
+        return self.get_counterparty_ip(counterparty_id)
+
+    def update_details_phys(self, counterparty_id: str, payload: DetailsPhysUpdate):
+        counterparty = (
+            self.db.query(CounterpartyDB)
+            .filter(CounterpartyDB.id == counterparty_id, CounterpartyDB.type == "PHYSIC")
+            .first()
+        )
+        details = (
+            self.db.query(DetailsPhysDB)
+            .filter(DetailsPhysDB.counterparty_id == counterparty_id)
+            .first()
+        )
+        if not counterparty or not details:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            return self.get_counterparty_phys(counterparty_id)
+
+        counterparty_fields = {"short_name", "full_name", "is_internal"}
+        detail_required_fields = {
+            "counterparty_id",
+            "person_id",
+            "passport_series",
+            "passport_number",
+            "passport_issued_by",
+            "passport_date_issued",
+            "passport_date",
+            "department_code",
+            "address_registration",
+            "address_living",
+        }
+
+        if "counterparty_id" in data and data["counterparty_id"] and data["counterparty_id"] != counterparty_id:
+            raise ValueError("counterparty_id не совпадает")
+
+        self._apply_patch_values(
+            counterparty,
+            {key: value for key, value in data.items() if key in counterparty_fields},
+            required_fields={"short_name", "full_name", "is_internal"},
+        )
+        self._apply_patch_values(
+            details,
+            {
+                key: value
+                for key, value in data.items()
+                if key not in counterparty_fields and key != "short_name" and key != "full_name" and key != "is_internal"
+            },
+            required_fields=detail_required_fields,
+        )
+
+        self.db.commit()
+        self.db.refresh(counterparty)
+        self.db.refresh(details)
+        return self.get_counterparty_phys(counterparty_id)
+
     def create_counterparty_additional(self, payload: CounterpartyAdditionalCreate):
         additional = CounterpartyAdditionalDB(**payload.model_dump())
         self.db.add(additional)
+        self.db.commit()
+        return {
+            "counterparty_id": additional.counterparty_id,
+            "additional_okved": additional.additional_okved,
+        }
+
+    def update_counterparty_additional(
+        self,
+        counterparty_id: str,
+        additional_okved: str,
+        payload: CounterpartyAdditionalUpdate,
+    ):
+        additional = (
+            self.db.query(CounterpartyAdditionalDB)
+            .filter(
+                CounterpartyAdditionalDB.counterparty_id == counterparty_id,
+                CounterpartyAdditionalDB.additional_okved == additional_okved,
+            )
+            .first()
+        )
+        if not additional:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        new_okved = data.get("additional_okved")
+        if not new_okved or new_okved == additional_okved:
+            return {
+                "counterparty_id": additional.counterparty_id,
+                "additional_okved": additional.additional_okved,
+            }
+
+        duplicate = (
+            self.db.query(CounterpartyAdditionalDB)
+            .filter(
+                CounterpartyAdditionalDB.counterparty_id == counterparty_id,
+                CounterpartyAdditionalDB.additional_okved == new_okved,
+            )
+            .first()
+        )
+        if duplicate:
+            raise ValueError("Такой дополнительный ОКВЭД уже существует")
+
+        additional.additional_okved = new_okved
         self.db.commit()
         return {
             "counterparty_id": additional.counterparty_id,
@@ -1194,6 +1404,20 @@ class ReferenceService:
         self.db.commit()
         self.db.refresh(person)
         return self.get_person(person.id)
+
+    def update_person(self, person_id: str, payload: PersonUpdate):
+        person = self.db.query(PersonDB).filter(PersonDB.id == person_id).first()
+        if not person:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            return self.get_person(person_id)
+
+        self._apply_patch_values(person, data, required_fields={"name", "last_naem"})
+        self.db.commit()
+        self.db.refresh(person)
+        return self.get_person(person_id)
 
     def create_employee(self, payload: EmployeeCreate):
         data = payload.model_dump(exclude_none=True)
@@ -1278,6 +1502,52 @@ class ReferenceService:
             "is_main": bool(account.is_main),
         }
 
+    def update_bank_account(self, counterparty_id: str, bank_account_id: str, payload: BankAccountUpdate):
+        account = (
+            self.db.query(BankAccountDB)
+            .filter(
+                BankAccountDB.id == bank_account_id,
+                BankAccountDB.counterparty_id == counterparty_id,
+            )
+            .first()
+        )
+        if not account:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        if "counterparty_id" in data and data["counterparty_id"] and data["counterparty_id"] != counterparty_id:
+            raise ValueError("counterparty_id не совпадает")
+
+        required_fields = {
+            "bank_name",
+            "bik",
+            "correspondent_account",
+            "account_number",
+            "account_name",
+            "is_main",
+        }
+        self._apply_patch_values(
+            account,
+            {key: value for key, value in data.items() if key != "counterparty_id"},
+            required_fields=required_fields,
+        )
+        if account.is_treasury is None:
+            account.is_treasury = False
+
+        self.db.commit()
+        self.db.refresh(account)
+        return {
+            "id": account.id,
+            "counterparty_id": account.counterparty_id,
+            "bank_name": account.bank_name,
+            "bik": account.bik,
+            "correspondent_account": account.correspondent_account,
+            "account_number": account.account_number,
+            "account_name": account.account_name,
+            "is_treasury": bool(account.is_treasury),
+            "is_main": bool(account.is_main),
+        }
+
     def list_contracts(self):
         return [
             {"id": contract.id, "contract_id": contract.contract_id, "name": contract.name}
@@ -1295,6 +1565,24 @@ class ReferenceService:
         data.setdefault("id", str(uuid.uuid4()))
         contract = ContractDB(**data)
         self.db.add(contract)
+        self.db.commit()
+        self.db.refresh(contract)
+        return {"id": contract.id, "contract_id": contract.contract_id, "name": contract.name}
+
+    def update_contract(self, contract_id: str, payload: ContractUpdate):
+        contract = self.db.query(ContractDB).filter(ContractDB.id == contract_id).first()
+        if not contract:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            return {"id": contract.id, "contract_id": contract.contract_id, "name": contract.name}
+
+        self._apply_patch_values(
+            contract,
+            data,
+            required_fields={"name"},
+        )
         self.db.commit()
         self.db.refresh(contract)
         return {"id": contract.id, "contract_id": contract.contract_id, "name": contract.name}
@@ -1320,6 +1608,20 @@ class ReferenceService:
         self.db.refresh(work_type)
         return {"id": work_type.id, "name": work_type.name}
 
+    def update_work_type(self, work_type_id: str, payload: WorkTypeUpdate):
+        work_type = self.db.query(WorkTypeDB).filter(WorkTypeDB.id == work_type_id).first()
+        if not work_type:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            return {"id": work_type.id, "name": work_type.name}
+
+        self._apply_patch_values(work_type, data, required_fields={"name"})
+        self.db.commit()
+        self.db.refresh(work_type)
+        return {"id": work_type.id, "name": work_type.name}
+
     def create_object_level(self, object_id: str, payload: ObjectLevelCreate):
         data = payload.model_dump(exclude_none=True)
         payload_object_id = data.get("object_id")
@@ -1331,6 +1633,49 @@ class ReferenceService:
 
         level = ObjectLevelDB(**data)
         self.db.add(level)
+        self.db.commit()
+        self.db.refresh(level)
+        return {
+            "id": level.id,
+            "object_id": level.object_id,
+            "name": level.name,
+            "level_type": level.level_type,
+            "level_number": level.level_number,
+            "is_active": bool(level.is_active),
+            "work_type": level.work_type,
+            "contract_id": level.contract_id,
+            "parent_id": level.parent_id,
+            "created_at": level.created_at,
+        }
+
+    def update_object_level(self, level_id: str, payload: ObjectLevelUpdate):
+        level = self.db.query(ObjectLevelDB).filter(ObjectLevelDB.id == level_id).first()
+        if not level:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            return {
+                "id": level.id,
+                "object_id": level.object_id,
+                "name": level.name,
+                "level_type": level.level_type,
+                "level_number": level.level_number,
+                "is_active": bool(level.is_active),
+                "work_type": level.work_type,
+                "contract_id": level.contract_id,
+                "parent_id": level.parent_id,
+                "created_at": level.created_at,
+            }
+
+        if "object_id" in data and data["object_id"] and data["object_id"] != level.object_id:
+            raise ValueError("object_id не совпадает")
+
+        self._apply_patch_values(
+            level,
+            data,
+            required_fields={"object_id", "level_type", "level_number"},
+        )
         self.db.commit()
         self.db.refresh(level)
         return {

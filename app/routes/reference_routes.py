@@ -4,18 +4,27 @@ from app.database import AuthDbSession, DbSession, SupplyDbSession
 from app.middleware.auth_middleware import get_session
 from app.schemas import (
     BankAccountCreate,
+    BankAccountUpdate,
     ContractCreate,
+    ContractUpdate,
     CounterpartyAdditionalCreate,
+    CounterpartyAdditionalUpdate,
     CounterpartyCreate,
     DetailsIPCreate,
+    DetailsIPUpdate,
     DetailsLLCCreate,
+    DetailsLLCUpdate,
     DetailsPhysCreate,
+    DetailsPhysUpdate,
     EmployeeCreate,
     EmployeeUpdate,
     ObjectLevelCreate,
+    ObjectLevelUpdate,
     ObjectCreate,
     ObjectUpdate,
     PersonCreate,
+    PersonUpdate,
+    WorkTypeUpdate,
     WorkTypeCreate,
 )
 from app.services.reference_service import ReferenceService
@@ -106,6 +115,18 @@ def get_object_level(level_id: str, db: DbSession):
     return data
 
 
+@objects_router.patch("/object-levels/{level_id}", summary="Редактировать уровень объекта")
+def update_object_level(level_id: str, payload: ObjectLevelUpdate, db: DbSession):
+    service = ReferenceService(db)
+    try:
+        data = service.update_object_level(level_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not data:
+        raise HTTPException(status_code=404, detail="Уровень объекта не найден")
+    return data
+
+
 @objects_router.post("/{object_id}/levels", summary="Создать уровень объекта")
 def create_object_level(object_id: str, payload: ObjectLevelCreate, db: DbSession):
     service = ReferenceService(db)
@@ -134,6 +155,15 @@ def get_person(person_id: str, db: DbSession):
 def create_person(payload: PersonCreate, db: DbSession):
     service = ReferenceService(db)
     return service.create_person(payload)
+
+
+@persons_router.patch("/{person_id}", summary="Редактировать лицо")
+def update_person(person_id: str, payload: PersonUpdate, db: DbSession):
+    service = ReferenceService(db)
+    data = service.update_person(person_id, payload)
+    if not data:
+        raise HTTPException(status_code=404, detail="Лицо не найдено")
+    return data
 
 
 @employees_router.get("", summary="Список сотрудников")
@@ -208,6 +238,15 @@ def create_contract(payload: ContractCreate, db: DbSession):
     return service.create_contract(payload)
 
 
+@contracts_router.patch("/{contract_id}", summary="Редактировать договор")
+def update_contract(contract_id: str, payload: ContractUpdate, db: DbSession):
+    service = ReferenceService(db)
+    data = service.update_contract(contract_id, payload)
+    if not data:
+        raise HTTPException(status_code=404, detail="Договор не найден")
+    return data
+
+
 @work_types_router.get("", summary="Список видов работ")
 def list_work_types(db: DbSession):
     service = ReferenceService(db)
@@ -229,6 +268,15 @@ def create_work_type(payload: WorkTypeCreate, db: DbSession):
     return service.create_work_type(payload)
 
 
+@work_types_router.patch("/{work_type_id}", summary="Редактировать вид работ")
+def update_work_type(work_type_id: str, payload: WorkTypeUpdate, db: DbSession):
+    service = ReferenceService(db)
+    data = service.update_work_type(work_type_id, payload)
+    if not data:
+        raise HTTPException(status_code=404, detail="Вид работ не найден")
+    return data
+
+
 @counterparties_router.get("", summary="Список контрагентов")
 def list_counterparties(
     db: DbSession,
@@ -248,6 +296,18 @@ def get_llc(counterparty_id: str, db: DbSession):
     return data
 
 
+@counterparties_router.patch("/llc/{counterparty_id}", summary="ООО: редактировать данные")
+def update_llc(counterparty_id: str, payload: DetailsLLCUpdate, db: DbSession):
+    service = ReferenceService(db)
+    try:
+        data = service.update_details_llc(counterparty_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not data:
+        raise HTTPException(status_code=404, detail="ООО не найдено")
+    return data
+
+
 @counterparties_router.get("/ip/{counterparty_id}", summary="ИП: детальная информация")
 def get_ip(counterparty_id: str, db: DbSession):
     service = ReferenceService(db)
@@ -257,10 +317,34 @@ def get_ip(counterparty_id: str, db: DbSession):
     return data
 
 
+@counterparties_router.patch("/ip/{counterparty_id}", summary="ИП: редактировать данные")
+def update_ip(counterparty_id: str, payload: DetailsIPUpdate, db: DbSession):
+    service = ReferenceService(db)
+    try:
+        data = service.update_details_ip(counterparty_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not data:
+        raise HTTPException(status_code=404, detail="ИП не найден")
+    return data
+
+
 @counterparties_router.get("/phys/{counterparty_id}", summary="Физлицо: детальная информация")
 def get_phys(counterparty_id: str, db: DbSession):
     service = ReferenceService(db)
     data = service.get_counterparty_phys(counterparty_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Физлицо не найдено")
+    return data
+
+
+@counterparties_router.patch("/phys/{counterparty_id}", summary="Физлицо: редактировать данные")
+def update_phys(counterparty_id: str, payload: DetailsPhysUpdate, db: DbSession):
+    service = ReferenceService(db)
+    try:
+        data = service.update_details_phys(counterparty_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not data:
         raise HTTPException(status_code=404, detail="Физлицо не найдено")
     return data
@@ -294,6 +378,26 @@ def get_counterparty_employees(counterparty_id: str, db: DbSession):
 def get_bank_accounts(counterparty_id: str, db: DbSession):
     service = ReferenceService(db)
     return service.list_bank_accounts(counterparty_id)
+
+
+@counterparties_router.patch(
+    "/{counterparty_id}/bank-accounts/{bank_account_id}",
+    summary="Редактировать банковский счет",
+)
+def update_bank_account(
+    counterparty_id: str,
+    bank_account_id: str,
+    payload: BankAccountUpdate,
+    db: DbSession,
+):
+    service = ReferenceService(db)
+    try:
+        data = service.update_bank_account(counterparty_id, bank_account_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not data:
+        raise HTTPException(status_code=404, detail="Банковский счет не найден")
+    return data
 
 
 @counterparties_router.get(
@@ -340,6 +444,26 @@ def create_phys(payload: DetailsPhysCreate, db: DbSession):
 def create_additional_okved(payload: CounterpartyAdditionalCreate, db: DbSession):
     service = ReferenceService(db)
     return service.create_counterparty_additional(payload)
+
+
+@counterparties_router.patch(
+    "/{counterparty_id}/additional-okved/{additional_okved}",
+    summary="Редактировать дополнительный ОКВЭД",
+)
+def update_additional_okved(
+    counterparty_id: str,
+    additional_okved: str,
+    payload: CounterpartyAdditionalUpdate,
+    db: DbSession,
+):
+    service = ReferenceService(db)
+    try:
+        data = service.update_counterparty_additional(counterparty_id, additional_okved, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not data:
+        raise HTTPException(status_code=404, detail="Дополнительный ОКВЭД не найден")
+    return data
 
 
 @counterparties_router.post(

@@ -42,6 +42,10 @@ class CounterpartyAdditionalCreate(BaseModel):
     additional_okved: str
 
 
+class CounterpartyAdditionalUpdate(BaseModel):
+    additional_okved: str
+
+
 class DetailsLLCCreate(BaseModel):
     id: Optional[int] = None
     counterparties_id: str
@@ -64,6 +68,31 @@ class DetailsLLCCreate(BaseModel):
     date_register: Optional[date] = None
 
 
+class DetailsLLCUpdate(BaseModel):
+    short_name: Optional[str] = None
+    full_name: Optional[str] = None
+    is_internal: Optional[bool] = None
+    contract_prefix: Optional[str] = None
+    counterparties_id: Optional[str] = None
+    inn: Optional[str] = None
+    kpp: Optional[str] = None
+    ogrn: Optional[str] = None
+    okpo: Optional[str] = None
+    okogu: Optional[str] = None
+    okato: Optional[str] = None
+    oktmo: Optional[str] = None
+    okfs: Optional[str] = None
+    okopf: Optional[str] = None
+    tax_system: Optional[str] = None
+    okved: Optional[str] = None
+    legal_address: Optional[str] = None
+    actual_address: Optional[str] = None
+    postal_address: Optional[str] = None
+    director_person_id: Optional[str] = None
+    director_basis: Optional[str] = None
+    date_register: Optional[date] = None
+
+
 class DetailsIPCreate(BaseModel):
     id: Optional[int] = None
     counterparty_id: str
@@ -77,6 +106,25 @@ class DetailsIPCreate(BaseModel):
     okato: Optional[str] = None
     oktmo: Optional[str] = None
     person_id: str
+    date_register: Optional[date] = None
+
+
+class DetailsIPUpdate(BaseModel):
+    short_name: Optional[str] = None
+    full_name: Optional[str] = None
+    is_internal: Optional[bool] = None
+    contract_prefix: Optional[str] = None
+    counterparty_id: Optional[str] = None
+    inn: Optional[str] = None
+    ogrnip: Optional[str] = None
+    okpo: Optional[str] = None
+    okved: Optional[str] = None
+    okopf: Optional[str] = None
+    okfs: Optional[str] = None
+    okogu: Optional[str] = None
+    okato: Optional[str] = None
+    oktmo: Optional[str] = None
+    person_id: Optional[str] = None
     date_register: Optional[date] = None
 
 
@@ -103,11 +151,28 @@ class DetailsPhysCreate(BaseModel):
         return value
 
 
+class DetailsPhysUpdate(DetailsPhysCreate):
+    short_name: Optional[str] = None
+    full_name: Optional[str] = None
+    is_internal: Optional[bool] = None
+    pass
+
+
 class PersonCreate(BaseModel):
     id: Optional[str] = None
     user_id: Optional[str] = None
     name: str
     last_naem: str
+    middle_name: Optional[str] = None
+    phone_personal: Optional[str] = None
+    email_personal: Optional[str] = None
+    birth_date: Optional[date] = None
+
+
+class PersonUpdate(BaseModel):
+    user_id: Optional[str] = None
+    name: Optional[str] = None
+    last_naem: Optional[str] = None
     middle_name: Optional[str] = None
     phone_personal: Optional[str] = None
     email_personal: Optional[str] = None
@@ -151,15 +216,35 @@ class BankAccountCreate(BaseModel):
     is_main: bool
 
 
+class BankAccountUpdate(BaseModel):
+    counterparty_id: Optional[str] = None
+    bank_name: Optional[str] = None
+    bik: Optional[str] = None
+    correspondent_account: Optional[str] = None
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
+    is_treasury: Optional[bool] = None
+    is_main: Optional[bool] = None
+
+
 class ContractCreate(BaseModel):
     id: Optional[str] = None
     contract_id: Optional[str] = None
     name: str
 
 
+class ContractUpdate(BaseModel):
+    contract_id: Optional[str] = None
+    name: Optional[str] = None
+
+
 class WorkTypeCreate(BaseModel):
     id: Optional[str] = None
     name: str
+
+
+class WorkTypeUpdate(BaseModel):
+    name: Optional[str] = None
 
 
 class ObjectLevelCreate(BaseModel):
@@ -173,3 +258,14 @@ class ObjectLevelCreate(BaseModel):
     contract_id: Optional[str] = None
     parent_id: Optional[str] = None
     created_at: Optional[datetime] = None
+
+
+class ObjectLevelUpdate(BaseModel):
+    object_id: Optional[str] = None
+    name: Optional[str] = None
+    level_type: Optional[str] = None
+    level_number: Optional[int] = None
+    is_active: Optional[bool] = None
+    work_type: Optional[str] = None
+    contract_id: Optional[str] = None
+    parent_id: Optional[str] = None
