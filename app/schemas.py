@@ -232,10 +232,28 @@ class ContractCreate(BaseModel):
     contract_id: Optional[str] = None
     name: str
 
+    @field_validator("contract_id", mode="before")
+    @classmethod
+    def normalize_contract_id(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return str(value)
+
 
 class ContractUpdate(BaseModel):
     contract_id: Optional[str] = None
     name: Optional[str] = None
+
+    @field_validator("contract_id", mode="before")
+    @classmethod
+    def normalize_contract_id(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return str(value)
 
 
 class WorkTypeCreate(BaseModel):
