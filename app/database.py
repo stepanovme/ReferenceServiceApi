@@ -3,7 +3,7 @@ from typing import Annotated, Generator
 
 from dotenv import load_dotenv
 from fastapi import Depends
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 load_dotenv()
@@ -67,6 +67,17 @@ def get_supply_db() -> Generator[Session, None, None]:  # pyright: ignore[report
 
 def init_db():
     Base.metadata.create_all(bind=reference_engine)
+    with reference_engine.connect() as conn:
+        result = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() "
+                "AND TABLE_NAME = 'counterparties' AND COLUMN_NAME = 'logo_url'"
+            )
+        )
+        if result.scalar() == 0:
+            conn.execute(text("ALTER TABLE counterparties ADD COLUMN logo_url VARCHAR(500) NULL"))
+            conn.commit()
 
 
 DbSession = Annotated[Session, Depends(get_db)]
