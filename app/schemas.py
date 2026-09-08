@@ -33,6 +33,7 @@ class CounterpartyCreate(BaseModel):
     full_name: str
     is_internal: bool
     contract_prefix: Optional[str] = None
+    logo_url: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from pathlib import Path
 import re
 from difflib import SequenceMatcher
 
 from sqlalchemy import bindparam, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
+
+UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
+LOGOS_DIR = UPLOADS_DIR / "logos"
 
 from app.models.reference import (
     BankAccountDB,
@@ -487,6 +491,7 @@ class ReferenceService:
                 "full_name": cp.full_name,
                 "is_internal": bool(cp.is_internal),
                 "contract_prefix": cp.contract_prefix,
+                "logo_url": cp.logo_url,
                 "created_at": cp.created_at,
             }
             for cp in query.all()
@@ -555,6 +560,7 @@ class ReferenceService:
                 "full_name": counterparty.full_name,
                 "is_internal": bool(counterparty.is_internal),
                 "contract_prefix": counterparty.contract_prefix,
+                "logo_url": counterparty.logo_url,
             },
             "details": {
                 "inn": details.inn,
@@ -637,6 +643,7 @@ class ReferenceService:
                 "full_name": counterparty.full_name,
                 "is_internal": bool(counterparty.is_internal),
                 "contract_prefix": counterparty.contract_prefix,
+                "logo_url": counterparty.logo_url,
             },
             "details": {
                 "inn": details.inn,
@@ -690,6 +697,7 @@ class ReferenceService:
                 "short_name": counterparty.short_name,
                 "full_name": counterparty.full_name,
                 "is_internal": bool(counterparty.is_internal),
+                "logo_url": counterparty.logo_url,
             },
             "personal_data": {
                 "name": person.name,
@@ -863,6 +871,7 @@ class ReferenceService:
                 "full_name": cp.full_name,
                 "is_internal": bool(cp.is_internal),
                 "contract_prefix": cp.contract_prefix,
+                "logo_url": cp.logo_url,
                 "created_at": cp.created_at,
             }
             for cp in counterparties
@@ -1053,6 +1062,7 @@ class ReferenceService:
                     "phone": phone,
                     "email": email,
                     "inn_ogrn_kpp": inn_ogrn_kpp,
+                    "logo_url": cp.logo_url,
                 }
             )
 
@@ -1151,6 +1161,7 @@ class ReferenceService:
             "full_name": counterparty.full_name,
             "is_internal": bool(counterparty.is_internal),
             "contract_prefix": counterparty.contract_prefix,
+            "logo_url": counterparty.logo_url,
             "created_at": counterparty.created_at,
         }
 
@@ -1793,3 +1804,50 @@ class ReferenceService:
             .all()
         )
         return [row[0] or "Без отдела" for row in rows]
+
+    def upload_counterparty_logo(self, counterparty_id: str, filename: str, file_bytes: bytes):
+        counterparty = (
+            self.db.query(CounterpartyDB)
+            .filter(CounterpartyDB.id == counterparty_id)
+            .first()
+        )
+        if not counterparty:
+            return None
+
+        LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+
+        ext = Path(filename).suffix.lower()
+        safe_name = f"{counterparty_id}{ext}"
+        file_path = LOGOS_DIR / safe_name
+        file_path.write_bytes(file_bytes)
+
+        counterparty.logo_url = f"/uploads/logos/{safe_name}"
+        self.db.commit()
+        self.db.refresh(counterparty)
+
+        return {
+            "id": counterparty.id,
+            "logo_url": counterparty.logo_url,
+        }
+
+    def delete_counterparty_logo(self, counterparty_id: str):
+        counterparty = (
+            self.db.query(CounterpartyDB)
+            .filter(CounterpartyDB.id == counterparty_id)
+            .first()
+        )
+        if not counterparty:
+            return None
+
+        if counterparty.logo_url:
+            file_path = Path(__file__).resolve().parent.parent.parent / counterparty.logo_url.lstrip("/")
+            if file_path.is_file():
+                file_path.unlink()
+            counterparty.logo_url = None
+            self.db.commit()
+            self.db.refresh(counterparty)
+
+        return {
+            "id": counterparty.id,
+            "logo_url": None,
+        }

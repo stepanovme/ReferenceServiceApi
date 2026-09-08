@@ -26,6 +26,7 @@ class CounterpartyDB(Base):
     full_name = Column(String(200), nullable=False)
     is_internal = Column(Boolean, nullable=False)
     contract_prefix = Column(String(10))
+    logo_url = Column(String(500))
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime)
 

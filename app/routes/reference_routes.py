@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 from app.database import AuthDbSession, DbSession, SupplyDbSession
 from app.middleware.auth_middleware import get_session
@@ -474,6 +474,44 @@ def create_bank_account(counterparty_id: str, payload: BankAccountCreate, db: Db
         raise HTTPException(status_code=400, detail="counterparty_id не совпадает")
     service = ReferenceService(db)
     return service.create_bank_account(payload)
+
+
+ALLOWED_LOGO_TYPES = {"image/png", "image/jpeg", "image/webp", "image/svg+xml"}
+MAX_LOGO_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
+@counterparties_router.post(
+    "/{counterparty_id}/logo", summary="Загрузить логотип контрагента"
+)
+async def upload_counterparty_logo(
+    counterparty_id: str,
+    file: UploadFile,
+    db: DbSession,
+):
+    if file.content_type not in ALLOWED_LOGO_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Недопустимый тип файла: {file.content_type}. Допустимы: png, jpeg, webp, svg",
+        )
+    file_bytes = await file.read()
+    if len(file_bytes) > MAX_LOGO_SIZE:
+        raise HTTPException(status_code=400, detail="Файл слишком большой (максимум 5 МБ)")
+    service = ReferenceService(db)
+    data = service.upload_counterparty_logo(counterparty_id, file.filename or "logo", file_bytes)
+    if not data:
+        raise HTTPException(status_code=404, detail="Контрагент не найден")
+    return data
+
+
+@counterparties_router.delete(
+    "/{counterparty_id}/logo", summary="Удалить логотип контрагента"
+)
+def delete_counterparty_logo(counterparty_id: str, db: DbSession):
+    service = ReferenceService(db)
+    data = service.delete_counterparty_logo(counterparty_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Контрагент не найден")
+    return data
 
 
 reference_router = APIRouter()
