@@ -162,6 +162,7 @@ class ObjectDB(Base):
     address = Column(Text)
     is_active = Column(Boolean, default=True)
     manager_id = Column(String(36))
+    work_type_id = Column(String(36))
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
 

@@ -71,6 +71,13 @@ class ReferenceService:
         if not exists:
             raise ValueError("manager_id не найден в таблице employees")
 
+    def _validate_work_type_id(self, work_type_id: str | None):
+        if work_type_id is None:
+            return
+        exists = self.db.query(WorkTypeDB.id).filter(WorkTypeDB.id == work_type_id).first()
+        if not exists:
+            raise ValueError("work_type_id не найден в таблице work_types")
+
     def _validate_employee_refs(
         self,
         counterparty_id: str | None = None,
@@ -295,6 +302,7 @@ class ReferenceService:
             .outerjoin(PersonDB, EmployeeDB.person_id == PersonDB.id)
             .all()
         )
+        work_type_names = {wt.id: wt.name for wt in self.db.query(WorkTypeDB).all()}
         result = []
         for obj, employee, person in rows:
             manager = None
@@ -313,6 +321,8 @@ class ReferenceService:
                     "address": obj.address,
                     "is_active": bool(obj.is_active),
                     "manager": manager,
+                    "work_type_id": obj.work_type_id,
+                    "work_type_name": work_type_names.get(obj.work_type_id),
                     "created_at": obj.created_at,
                     "updated_at": obj.updated_at,
                 }
@@ -345,6 +355,8 @@ class ReferenceService:
             "address": obj.address,
             "is_active": bool(obj.is_active),
             "manager": manager,
+            "work_type_id": obj.work_type_id,
+            "work_type_name": self._work_type_name(obj.work_type_id),
             "created_at": obj.created_at,
             "updated_at": obj.updated_at,
         }
@@ -908,6 +920,12 @@ class ReferenceService:
         employees = [self._employee_payload(employee, person, counterparty) for employee, person, counterparty in rows]
         return [employee for employee in employees if self._employee_matches_search(employee, search)]
 
+    def _work_type_name(self, work_type_id):
+        if not work_type_id:
+            return None
+        wt = self.db.query(WorkTypeDB).filter(WorkTypeDB.id == work_type_id).first()
+        return wt.name if wt else None
+
     def list_objects_by_employee(self, employee_id: str):
         objects = self.db.query(ObjectDB).filter(ObjectDB.manager_id == employee_id).all()
         return [
@@ -917,6 +935,8 @@ class ReferenceService:
                 "full_name": obj.full_name,
                 "address": obj.address,
                 "is_active": bool(obj.is_active),
+                "work_type_id": obj.work_type_id,
+                "work_type_name": self._work_type_name(obj.work_type_id),
                 "created_at": obj.created_at,
                 "updated_at": obj.updated_at,
             }
@@ -1073,6 +1093,7 @@ class ReferenceService:
         data.setdefault("id", str(uuid.uuid4()))
         data.setdefault("created_at", datetime.utcnow())
         self._validate_manager_id(data.get("manager_id"))
+        self._validate_work_type_id(data.get("work_type_id"))
         obj = ObjectDB(**data)
         self.db.add(obj)
         try:
@@ -1106,6 +1127,7 @@ class ReferenceService:
             data["updated_at"] = datetime.utcnow()
 
         self._validate_manager_id(data.get("manager_id"))
+        self._validate_work_type_id(data.get("work_type_id"))
 
         for field, value in data.items():
             setattr(obj, field, value)
@@ -1815,6 +1837,11 @@ class ReferenceService:
             return None
 
         LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+
+        if counterparty.logo_url:
+            old_path = Path(__file__).resolve().parent.parent.parent / counterparty.logo_url.lstrip("/")
+            if old_path.is_file():
+                old_path.unlink()
 
         ext = Path(filename).suffix.lower()
         safe_name = f"{counterparty_id}{ext}"

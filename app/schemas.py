@@ -13,6 +13,7 @@ class ObjectCreate(BaseModel):
     address: Optional[str] = None
     is_active: Optional[bool] = True
     manager_id: Optional[str] = None
+    work_type_id: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -23,6 +24,7 @@ class ObjectUpdate(BaseModel):
     address: Optional[str] = None
     is_active: Optional[bool] = None
     manager_id: Optional[str] = None
+    work_type_id: Optional[str] = None
     updated_at: Optional[datetime] = None
 
 
