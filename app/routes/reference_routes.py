@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 
 from app.database import AuthDbSession, DbSession, SupplyDbSession
 from app.middleware.auth_middleware import get_session
@@ -22,8 +22,12 @@ from app.schemas import (
     ObjectLevelUpdate,
     ObjectCreate,
     ObjectUpdate,
+    ObjectPositionCreate,
+    ObjectPositionUpdate,
     PersonCreate,
     PersonUpdate,
+    PositionCreate,
+    PositionUpdate,
     WorkTypeUpdate,
     WorkTypeCreate,
 )
@@ -36,6 +40,7 @@ persons_router = APIRouter(prefix="/persons", tags=["Лица"], dependencies=ba
 employees_router = APIRouter(prefix="/employees", tags=["Сотрудники"], dependencies=base_dependencies)
 contracts_router = APIRouter(prefix="/contracts", tags=["Договоры"], dependencies=base_dependencies)
 work_types_router = APIRouter(prefix="/work-types", tags=["Виды работ"], dependencies=base_dependencies)
+positions_router = APIRouter(prefix="/positions", tags=["Должности"], dependencies=base_dependencies)
 counterparties_router = APIRouter(
     prefix="/counterparties",
     tags=["Контрагенты"],
@@ -134,6 +139,116 @@ def create_object_level(object_id: str, payload: ObjectLevelCreate, db: DbSessio
         return service.create_object_level(object_id, payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@objects_router.get("/{object_id}/positions", summary="Список позиций пользователей на объекте")
+def list_object_positions(object_id: str, db: DbSession, auth_db: AuthDbSession):
+    service = ReferenceService(db)
+    return service.list_object_positions(object_id, auth_db)
+
+
+@objects_router.get("/positions/{object_position_id}", summary="Позиция пользователя на объекте по ID")
+def get_object_position(object_position_id: str, db: DbSession, auth_db: AuthDbSession):
+    service = ReferenceService(db)
+    data = service.get_object_position(object_position_id, auth_db)
+    if not data:
+        raise HTTPException(status_code=404, detail="Позиция не найдена")
+    return data
+
+
+@objects_router.post("/{object_id}/positions", summary="Добавить пользователя с позицией на объект")
+def create_object_position(
+    object_id: str,
+    payload: ObjectPositionCreate,
+    db: DbSession,
+    auth_db: AuthDbSession,
+):
+    service = ReferenceService(db)
+    try:
+        return service.create_object_position(object_id, payload, auth_db)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@objects_router.patch("/positions/{object_position_id}", summary="Редактировать позицию пользователя на объекте")
+def update_object_position(
+    object_position_id: str,
+    payload: ObjectPositionUpdate,
+    db: DbSession,
+    auth_db: AuthDbSession,
+):
+    service = ReferenceService(db)
+    try:
+        data = service.update_object_position(object_position_id, payload, auth_db)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not data:
+        raise HTTPException(status_code=404, detail="Позиция не найдена")
+    return data
+
+
+@objects_router.delete("/positions/{object_position_id}", summary="Удалить позицию пользователя с объекта")
+def delete_object_position(object_position_id: str, db: DbSession):
+    service = ReferenceService(db)
+    data = service.delete_object_position(object_position_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Позиция не найдена")
+    return data
+
+
+ALLOWED_OBJECT_MEDIA_TYPES = {
+    "image/png": "photo",
+    "image/jpeg": "photo",
+    "image/webp": "photo",
+    "video/mp4": "video",
+    "video/quicktime": "video",
+    "video/webm": "video",
+}
+MAX_OBJECT_MEDIA_SIZE = 200 * 1024 * 1024  # 200 MB
+
+
+@objects_router.get("/{object_id}/media", summary="Список медиафайлов объекта")
+def list_object_media(object_id: str, db: DbSession, category: str | None = None):
+    service = ReferenceService(db)
+    return service.list_object_media(object_id, category)
+
+
+@objects_router.post("/{object_id}/media", summary="Загрузить медиафайл объекта")
+async def upload_object_media(
+    object_id: str,
+    db: DbSession,
+    file: UploadFile,
+    category: str = Form(..., description="visualization или progress"),
+):
+    media_type = ALLOWED_OBJECT_MEDIA_TYPES.get(file.content_type or "")
+    if not media_type:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Недопустимый тип файла: {file.content_type}. Допустимы фото (png/jpeg/webp) и видео (mp4/mov/webm)",
+        )
+    file_bytes = await file.read()
+    if len(file_bytes) > MAX_OBJECT_MEDIA_SIZE:
+        raise HTTPException(status_code=400, detail="Файл слишком большой (максимум 200 МБ)")
+
+    service = ReferenceService(db)
+    try:
+        data = service.upload_object_media(
+            object_id, category, media_type, file.filename or "file", file_bytes
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not data:
+        raise HTTPException(status_code=404, detail="Объект не найден")
+    return data
+
+
+@objects_router.delete("/media/{media_id}", summary="Удалить медиафайл объекта")
+def delete_object_media(media_id: str, db: DbSession):
+    service = ReferenceService(db)
+    data = service.delete_object_media(media_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Медиафайл не найден")
+    return data
 
 
 @persons_router.get("", summary="Список лиц")
@@ -274,6 +389,45 @@ def update_work_type(work_type_id: str, payload: WorkTypeUpdate, db: DbSession):
     data = service.update_work_type(work_type_id, payload)
     if not data:
         raise HTTPException(status_code=404, detail="Вид работ не найден")
+    return data
+
+
+@positions_router.get("", summary="Список должностей")
+def list_positions(db: DbSession):
+    service = ReferenceService(db)
+    return service.list_positions()
+
+
+@positions_router.get("/{position_id}", summary="Получить должность по ID")
+def get_position(position_id: int, db: DbSession):
+    service = ReferenceService(db)
+    data = service.get_position(position_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Должность не найдена")
+    return data
+
+
+@positions_router.post("", summary="Создать должность")
+def create_position(payload: PositionCreate, db: DbSession):
+    service = ReferenceService(db)
+    return service.create_position(payload)
+
+
+@positions_router.patch("/{position_id}", summary="Редактировать должность")
+def update_position(position_id: int, payload: PositionUpdate, db: DbSession):
+    service = ReferenceService(db)
+    data = service.update_position(position_id, payload)
+    if not data:
+        raise HTTPException(status_code=404, detail="Должность не найдена")
+    return data
+
+
+@positions_router.delete("/{position_id}", summary="Удалить должность")
+def delete_position(position_id: int, db: DbSession):
+    service = ReferenceService(db)
+    data = service.delete_position(position_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Должность не найдена")
     return data
 
 
@@ -520,4 +674,5 @@ reference_router.include_router(persons_router)
 reference_router.include_router(employees_router)
 reference_router.include_router(contracts_router)
 reference_router.include_router(work_types_router)
+reference_router.include_router(positions_router)
 reference_router.include_router(counterparties_router)

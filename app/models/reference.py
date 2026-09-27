@@ -163,8 +163,37 @@ class ObjectDB(Base):
     is_active = Column(Boolean, default=True)
     manager_id = Column(String(36))
     work_type_id = Column(String(36))
+    customer_id = Column(String(36))
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
+
+
+class PositionDB(Base):
+    __tablename__ = "positions"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+
+
+class ObjectPositionDB(Base):
+    __tablename__ = "object_positions"
+
+    id = Column(CHAR(36), primary_key=True)
+    object_id = Column(CHAR(36), nullable=False)
+    position_id = Column(Integer, nullable=False)
+    user_id = Column(CHAR(36), nullable=False)
+
+
+class ObjectMediaDB(Base):
+    __tablename__ = "object_media"
+
+    id = Column(CHAR(36), primary_key=True)
+    object_id = Column(CHAR(36), nullable=False)
+    category = Column(String(20), nullable=False)
+    media_type = Column(String(10), nullable=False)
+    file_url = Column(String(500), nullable=False)
+    file_name = Column(String(255))
+    created_at = Column(DateTime)
 
 
 class PersonDB(Base):

@@ -14,6 +14,7 @@ class ObjectCreate(BaseModel):
     is_active: Optional[bool] = True
     manager_id: Optional[str] = None
     work_type_id: Optional[str] = None
+    customer_id: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -25,7 +26,29 @@ class ObjectUpdate(BaseModel):
     is_active: Optional[bool] = None
     manager_id: Optional[str] = None
     work_type_id: Optional[str] = None
+    customer_id: Optional[str] = None
     updated_at: Optional[datetime] = None
+
+
+class PositionCreate(BaseModel):
+    id: Optional[int] = None
+    name: str
+
+
+class PositionUpdate(BaseModel):
+    name: Optional[str] = None
+
+
+class ObjectPositionCreate(BaseModel):
+    id: Optional[str] = None
+    object_id: Optional[str] = None
+    position_id: int
+    user_id: str
+
+
+class ObjectPositionUpdate(BaseModel):
+    position_id: Optional[int] = None
+    user_id: Optional[str] = None
 
 
 class CounterpartyCreate(BaseModel):

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, aliased
 
 UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
 LOGOS_DIR = UPLOADS_DIR / "logos"
+OBJECT_MEDIA_DIR = UPLOADS_DIR / "object_media"
 
 from app.models.reference import (
     BankAccountDB,
@@ -25,7 +26,10 @@ from app.models.reference import (
     InternalEmployeeDB,
     ObjectLevelDB,
     ObjectDB,
+    ObjectMediaDB,
+    ObjectPositionDB,
     PersonDB,
+    PositionDB,
     WorkTypeDB,
 )
 from app.schemas import (
@@ -48,8 +52,12 @@ from app.schemas import (
     ObjectLevelUpdate,
     ObjectCreate,
     ObjectUpdate,
+    ObjectPositionCreate,
+    ObjectPositionUpdate,
     PersonCreate,
     PersonUpdate,
+    PositionCreate,
+    PositionUpdate,
     WorkTypeUpdate,
     WorkTypeCreate,
 )
@@ -77,6 +85,84 @@ class ReferenceService:
         exists = self.db.query(WorkTypeDB.id).filter(WorkTypeDB.id == work_type_id).first()
         if not exists:
             raise ValueError("work_type_id не найден в таблице work_types")
+
+    def _validate_customer_id(self, customer_id: str | None):
+        if customer_id is None:
+            return
+        exists = self.db.query(CounterpartyDB.id).filter(CounterpartyDB.id == customer_id).first()
+        if not exists:
+            raise ValueError("customer_id не найден в таблице counterparties")
+
+    def _person_contact(self, person: PersonDB | None):
+        if not person:
+            return None
+        return {
+            "id": person.id,
+            "name": person.name,
+            "last_name": person.last_naem,
+            "middle_name": person.middle_name,
+            "phone": person.phone_personal,
+            "email": person.email_personal,
+        }
+
+    def _get_customer_info(self, customer_id: str | None):
+        if not customer_id:
+            return None
+        counterparty = (
+            self.db.query(CounterpartyDB).filter(CounterpartyDB.id == customer_id).first()
+        )
+        if not counterparty:
+            return None
+
+        info = {
+            "id": counterparty.id,
+            "type": counterparty.type,
+            "name": counterparty.short_name or counterparty.full_name,
+            "full_name": counterparty.full_name,
+            "contact": None,
+        }
+
+        if counterparty.type == "IP":
+            details = (
+                self.db.query(DetailsIPDB)
+                .filter(DetailsIPDB.counterparty_id == customer_id)
+                .first()
+            )
+            if details:
+                info["inn"] = details.inn
+                person = (
+                    self.db.query(PersonDB).filter(PersonDB.id == details.person_id).first()
+                )
+                info["contact"] = self._person_contact(person)
+        elif counterparty.type == "LLC":
+            details = (
+                self.db.query(DetailsLLCDB)
+                .filter(DetailsLLCDB.counterparties_id == customer_id)
+                .first()
+            )
+            if details:
+                info["inn"] = details.inn
+                info["kpp"] = details.kpp
+                person = (
+                    self.db.query(PersonDB)
+                    .filter(PersonDB.id == details.director_person_id)
+                    .first()
+                )
+                info["contact"] = self._person_contact(person)
+        elif counterparty.type == "PHYSIC":
+            details = (
+                self.db.query(DetailsPhysDB)
+                .filter(DetailsPhysDB.counterparty_id == customer_id)
+                .first()
+            )
+            if details:
+                info["inn"] = details.inn
+                person = (
+                    self.db.query(PersonDB).filter(PersonDB.id == details.person_id).first()
+                )
+                info["contact"] = self._person_contact(person)
+
+        return info
 
     def _validate_employee_refs(
         self,
@@ -323,6 +409,8 @@ class ReferenceService:
                     "manager": manager,
                     "work_type_id": obj.work_type_id,
                     "work_type_name": work_type_names.get(obj.work_type_id),
+                    "customer_id": obj.customer_id,
+                    "customer": self._get_customer_info(obj.customer_id),
                     "created_at": obj.created_at,
                     "updated_at": obj.updated_at,
                 }
@@ -357,6 +445,8 @@ class ReferenceService:
             "manager": manager,
             "work_type_id": obj.work_type_id,
             "work_type_name": self._work_type_name(obj.work_type_id),
+            "customer_id": obj.customer_id,
+            "customer": self._get_customer_info(obj.customer_id),
             "created_at": obj.created_at,
             "updated_at": obj.updated_at,
         }
@@ -937,6 +1027,8 @@ class ReferenceService:
                 "is_active": bool(obj.is_active),
                 "work_type_id": obj.work_type_id,
                 "work_type_name": self._work_type_name(obj.work_type_id),
+                "customer_id": obj.customer_id,
+                "customer": self._get_customer_info(obj.customer_id),
                 "created_at": obj.created_at,
                 "updated_at": obj.updated_at,
             }
@@ -1094,6 +1186,7 @@ class ReferenceService:
         data.setdefault("created_at", datetime.utcnow())
         self._validate_manager_id(data.get("manager_id"))
         self._validate_work_type_id(data.get("work_type_id"))
+        self._validate_customer_id(data.get("customer_id"))
         obj = ObjectDB(**data)
         self.db.add(obj)
         try:
@@ -1128,6 +1221,7 @@ class ReferenceService:
 
         self._validate_manager_id(data.get("manager_id"))
         self._validate_work_type_id(data.get("work_type_id"))
+        self._validate_customer_id(data.get("customer_id"))
 
         for field, value in data.items():
             setattr(obj, field, value)
@@ -1878,3 +1972,256 @@ class ReferenceService:
             "id": counterparty.id,
             "logo_url": None,
         }
+
+    # ------------------------------------------------------------------
+    # Позиции (справочник должностей на объекте)
+    # ------------------------------------------------------------------
+
+    def list_positions(self):
+        return [
+            {"id": position.id, "name": position.name}
+            for position in self.db.query(PositionDB).order_by(PositionDB.name).all()
+        ]
+
+    def get_position(self, position_id: int):
+        position = self.db.query(PositionDB).filter(PositionDB.id == position_id).first()
+        if not position:
+            return None
+        return {"id": position.id, "name": position.name}
+
+    def create_position(self, payload: PositionCreate):
+        data = payload.model_dump(exclude_none=True)
+        position = PositionDB(**data)
+        self.db.add(position)
+        self.db.commit()
+        self.db.refresh(position)
+        return {"id": position.id, "name": position.name}
+
+    def update_position(self, position_id: int, payload: PositionUpdate):
+        position = self.db.query(PositionDB).filter(PositionDB.id == position_id).first()
+        if not position:
+            return None
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            return {"id": position.id, "name": position.name}
+        self._apply_patch_values(position, data, required_fields={"name"})
+        self.db.commit()
+        self.db.refresh(position)
+        return {"id": position.id, "name": position.name}
+
+    def delete_position(self, position_id: int):
+        position = self.db.query(PositionDB).filter(PositionDB.id == position_id).first()
+        if not position:
+            return None
+        self.db.delete(position)
+        self.db.commit()
+        return {"deleted": True, "id": position_id}
+
+    # ------------------------------------------------------------------
+    # Позиции пользователей на объекте
+    # ------------------------------------------------------------------
+
+    def _get_users_info(self, auth_db: Session, user_ids: set[str]) -> dict:
+        if not user_ids:
+            return {}
+        query = text(
+            """
+            SELECT id, name, surname, patronymic, username, phone
+            FROM users
+            WHERE id IN :ids
+            """
+        ).bindparams(bindparam("ids", expanding=True))
+        rows = auth_db.execute(query, {"ids": list(user_ids)}).fetchall()
+        result = {}
+        for row in rows:
+            full_name = " ".join(
+                part for part in [row.surname, row.name, row.patronymic] if part
+            )
+            result[row.id] = {
+                "id": row.id,
+                "full_name": full_name,
+                "name": row.name,
+                "surname": row.surname,
+                "patronymic": row.patronymic,
+                "email": row.username,
+                "phone": row.phone,
+            }
+        return result
+
+    def _validate_position_id(self, position_id: int | None):
+        if position_id is None:
+            return
+        exists = self.db.query(PositionDB.id).filter(PositionDB.id == position_id).first()
+        if not exists:
+            raise ValueError("position_id не найден в таблице positions")
+
+    def list_object_positions(self, object_id: str, auth_db: Session):
+        rows = (
+            self.db.query(ObjectPositionDB, PositionDB)
+            .outerjoin(PositionDB, ObjectPositionDB.position_id == PositionDB.id)
+            .filter(ObjectPositionDB.object_id == object_id)
+            .all()
+        )
+        users_by_id = self._get_users_info(
+            auth_db, {object_position.user_id for object_position, _ in rows}
+        )
+        return [
+            {
+                "id": object_position.id,
+                "object_id": object_position.object_id,
+                "position_id": object_position.position_id,
+                "position_name": position.name if position else None,
+                "user_id": object_position.user_id,
+                "user": users_by_id.get(object_position.user_id),
+            }
+            for object_position, position in rows
+        ]
+
+    def get_object_position(self, object_position_id: str, auth_db: Session):
+        row = (
+            self.db.query(ObjectPositionDB, PositionDB)
+            .outerjoin(PositionDB, ObjectPositionDB.position_id == PositionDB.id)
+            .filter(ObjectPositionDB.id == object_position_id)
+            .first()
+        )
+        if not row:
+            return None
+        object_position, position = row
+        users_by_id = self._get_users_info(auth_db, {object_position.user_id})
+        return {
+            "id": object_position.id,
+            "object_id": object_position.object_id,
+            "position_id": object_position.position_id,
+            "position_name": position.name if position else None,
+            "user_id": object_position.user_id,
+            "user": users_by_id.get(object_position.user_id),
+        }
+
+    def create_object_position(
+        self, object_id: str, payload: ObjectPositionCreate, auth_db: Session
+    ):
+        data = payload.model_dump(exclude_none=True)
+        payload_object_id = data.get("object_id")
+        if payload_object_id and payload_object_id != object_id:
+            raise ValueError("object_id не совпадает")
+        data["object_id"] = object_id
+        data.setdefault("id", str(uuid.uuid4()))
+
+        obj = self.db.query(ObjectDB.id).filter(ObjectDB.id == object_id).first()
+        if not obj:
+            raise ValueError("Объект не найден")
+        self._validate_position_id(data.get("position_id"))
+
+        object_position = ObjectPositionDB(**data)
+        self.db.add(object_position)
+        self.db.commit()
+        self.db.refresh(object_position)
+        return self.get_object_position(object_position.id, auth_db)
+
+    def update_object_position(
+        self, object_position_id: str, payload: ObjectPositionUpdate, auth_db: Session
+    ):
+        object_position = (
+            self.db.query(ObjectPositionDB)
+            .filter(ObjectPositionDB.id == object_position_id)
+            .first()
+        )
+        if not object_position:
+            return None
+
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            return self.get_object_position(object_position_id, auth_db)
+
+        self._validate_position_id(data.get("position_id"))
+        self._apply_patch_values(object_position, data)
+        self.db.commit()
+        self.db.refresh(object_position)
+        return self.get_object_position(object_position_id, auth_db)
+
+    def delete_object_position(self, object_position_id: str):
+        object_position = (
+            self.db.query(ObjectPositionDB)
+            .filter(ObjectPositionDB.id == object_position_id)
+            .first()
+        )
+        if not object_position:
+            return None
+        self.db.delete(object_position)
+        self.db.commit()
+        return {"deleted": True, "id": object_position_id}
+
+    # ------------------------------------------------------------------
+    # Медиафайлы объекта (визуализация / ход работ)
+    # ------------------------------------------------------------------
+
+    OBJECT_MEDIA_CATEGORIES = {"visualization", "progress"}
+
+    def _object_media_payload(self, media: ObjectMediaDB):
+        return {
+            "id": media.id,
+            "object_id": media.object_id,
+            "category": media.category,
+            "media_type": media.media_type,
+            "file_url": media.file_url,
+            "file_name": media.file_name,
+            "created_at": media.created_at,
+        }
+
+    def list_object_media(self, object_id: str, category: str | None = None):
+        query = self.db.query(ObjectMediaDB).filter(ObjectMediaDB.object_id == object_id)
+        if category:
+            query = query.filter(ObjectMediaDB.category == category)
+        rows = query.order_by(ObjectMediaDB.created_at.desc()).all()
+        return [self._object_media_payload(media) for media in rows]
+
+    def upload_object_media(
+        self,
+        object_id: str,
+        category: str,
+        media_type: str,
+        filename: str,
+        file_bytes: bytes,
+    ):
+        obj = self.db.query(ObjectDB.id).filter(ObjectDB.id == object_id).first()
+        if not obj:
+            return None
+
+        if category not in self.OBJECT_MEDIA_CATEGORIES:
+            raise ValueError("Недопустимая категория медиафайла")
+
+        OBJECT_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+
+        media_id = str(uuid.uuid4())
+        ext = Path(filename).suffix.lower()
+        safe_name = f"{media_id}{ext}"
+        file_path = OBJECT_MEDIA_DIR / safe_name
+        file_path.write_bytes(file_bytes)
+
+        media = ObjectMediaDB(
+            id=media_id,
+            object_id=object_id,
+            category=category,
+            media_type=media_type,
+            file_url=f"/uploads/object_media/{safe_name}",
+            file_name=filename,
+            created_at=datetime.utcnow(),
+        )
+        self.db.add(media)
+        self.db.commit()
+        self.db.refresh(media)
+        return self._object_media_payload(media)
+
+    def delete_object_media(self, media_id: str):
+        media = self.db.query(ObjectMediaDB).filter(ObjectMediaDB.id == media_id).first()
+        if not media:
+            return None
+
+        if media.file_url:
+            file_path = Path(__file__).resolve().parent.parent.parent / media.file_url.lstrip("/")
+            if file_path.is_file():
+                file_path.unlink()
+
+        self.db.delete(media)
+        self.db.commit()
+        return {"deleted": True, "id": media_id}
