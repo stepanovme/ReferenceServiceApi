@@ -585,18 +585,32 @@ class ReferenceService:
             query = query.filter(CounterpartyDB.type == counterparty_type)
         if is_internal is not None:
             query = query.filter(CounterpartyDB.is_internal == is_internal)
+        counterparties = query.all()
+        inn_by_id: dict[str, str | None] = {}
+        if counterparties:
+            ids = [cp.id for cp in counterparties]
+            for model, id_column in (
+                (DetailsLLCDB, DetailsLLCDB.counterparties_id),
+                (DetailsIPDB, DetailsIPDB.counterparty_id),
+                (DetailsPhysDB, DetailsPhysDB.counterparty_id),
+            ):
+                for counterparty_id, inn in (
+                    self.db.query(id_column, model.inn).filter(id_column.in_(ids)).all()
+                ):
+                    inn_by_id.setdefault(counterparty_id, inn)
         return [
             {
                 "id": cp.id,
                 "type": cp.type,
                 "short_name": cp.short_name,
                 "full_name": cp.full_name,
+                "inn": inn_by_id.get(cp.id),
                 "is_internal": bool(cp.is_internal),
                 "contract_prefix": cp.contract_prefix,
                 "logo_url": cp.logo_url,
                 "created_at": cp.created_at,
             }
-            for cp in query.all()
+            for cp in counterparties
         ]
 
     def get_counterparty_llc(self, counterparty_id: str):
