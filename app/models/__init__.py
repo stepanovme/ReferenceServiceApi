@@ -1,3 +1,4 @@
+from app.models.counterparty_check import CounterpartyCheckDB, CounterpartyCheckSourceDB
 from app.models.reference import (
     BankAccountDB,
     ContractDB,
@@ -16,6 +17,8 @@ from app.models.reference import (
 from app.models.session import SessionDB
 
 __all__ = [
+    "CounterpartyCheckDB",
+    "CounterpartyCheckSourceDB",
     "BankAccountDB",
     "ContractDB",
     "CounterpartyAdditionalDB",
