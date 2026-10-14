@@ -9,6 +9,8 @@ MAX_PAGES = 5
 
 # имя источника -> (endpoint, дополнительные параметры, ключ с постраничной выдачей)
 SOURCES: dict[str, tuple[str, dict, bool]] = {
+    "company": ("company", {}, False),
+    "entrepreneur": ("entrepreneur", {}, False),
     "reliability": ("reliability", {}, False),
     "finances": ("finances", {}, False),
     "legal_cases": ("legal-cases", {}, True),
@@ -17,6 +19,10 @@ SOURCES: dict[str, tuple[str, dict, bool]] = {
     "inspections": ("inspections", {"sort": "-date", "limit": 10}, True),
     "fedresurs": ("fedresurs", {}, True),
 }
+
+
+# источники, применимые только к одному типу контрагента (остальные — ко всем)
+SOURCE_ONLY_FOR: dict[str, str] = {"company": "LLC", "entrepreneur": "IP"}
 
 
 class CheckoError(Exception):

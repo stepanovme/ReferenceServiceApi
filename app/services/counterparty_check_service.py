@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.counterparty_check import CounterpartyCheckDB, CounterpartyCheckSourceDB
 from app.models.reference import CounterpartyDB, DetailsIPDB, DetailsLLCDB
-from app.services.checko_client import SOURCES, CheckoClient, CheckoError
+from app.services.checko_client import SOURCE_ONLY_FOR, SOURCES, CheckoClient, CheckoError
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,166 @@ def _records(payload: dict | None) -> list:
     return (data.get("Записи") or []) if isinstance(data, dict) else []
 
 
+def _dict(value) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _list(value) -> list:
+    return value if isinstance(value, list) else []
+
+
+def _build_company_profile(data: dict) -> dict:
+    tax = _dict(data.get("Налоги"))
+    founders = _dict(data.get("Учред"))
+    unfair = _list(data.get("НедобПостЗап"))
+    legal_address = _dict(data.get("ЮрАдрес"))
+    status = _dict(data.get("Статус"))
+    liquidation = _dict(data.get("Ликвид"))
+    msp = _dict(data.get("РМСП"))
+    okved = _dict(data.get("ОКВЭД"))
+    capital = _dict(data.get("УстКап"))
+
+    def share(item: dict):
+        return _dict(item.get("Доля")).get("Процент")
+
+    return {
+        "ogrn": data.get("ОГРН"),
+        "inn": data.get("ИНН"),
+        "kpp": data.get("КПП"),
+        "short_name": data.get("НаимСокр"),
+        "full_name": data.get("НаимПолн"),
+        "registration_date": data.get("ДатаРег"),
+        "status": {"code": status.get("Код"), "name": status.get("Наим")},
+        "liquidation": {"date": liquidation.get("Дата"), "reason": liquidation.get("Наим")}
+        if liquidation
+        else None,
+        "region": _dict(data.get("Регион")).get("Наим"),
+        "legal_address": {
+            "address": legal_address.get("АдресРФ"),
+            "unreliable": bool(legal_address.get("Недост")),
+            "unreliable_reason": legal_address.get("НедостОпис"),
+            "mass_address_companies": len(_list(legal_address.get("МассАдрес"))),
+        },
+        "main_okved": {"code": okved.get("Код"), "name": okved.get("Наим")},
+        "additional_okved_count": len(_list(data.get("ОКВЭДДоп"))),
+        "legal_form": _dict(data.get("ОКОПФ")).get("Наим"),
+        "authorized_capital": {"type": capital.get("Тип"), "amount": capital.get("Сумма")},
+        "employees_count": data.get("СЧР"),
+        "taxes": {
+            "special_regimes": _list(tax.get("ОсобРежим")),
+            "paid_total": tax.get("СумУпл"),
+            "paid_year": tax.get("СведУплГод"),
+            "paid_details": _list(tax.get("СведУпл")),
+            "arrears": tax.get("СумНедоим"),
+            "arrears_date": tax.get("НедоимДата"),
+        },
+        "msp": {"category": msp.get("Кат"), "included_at": msp.get("ДатаВкл")} if msp else None,
+        "msp_support_count": len(_list(data.get("ПоддержМСП"))),
+        "management": [
+            {
+                "name": m.get("ФИО"),
+                "inn": m.get("ИНН"),
+                "position": m.get("НаимДолжн"),
+                "unreliable": bool(m.get("Недост")),
+                "mass_manager": bool(m.get("МассРуковод")),
+                "disqualified": bool(m.get("ДисквЛицо")),
+            }
+            for m in _list(data.get("Руковод"))
+            if isinstance(m, dict)
+        ],
+        "managing_company": _dict(data.get("УпрОрг")).get("НаимПолн"),
+        "founders": {
+            "individuals": [
+                {"name": f.get("ФИО"), "inn": f.get("ИНН"), "share_percent": share(f)}
+                for f in _list(founders.get("ФЛ"))
+                if isinstance(f, dict)
+            ],
+            "russian_companies": [
+                {"name": f.get("НаимПолн"), "inn": f.get("ИНН"), "share_percent": share(f)}
+                for f in _list(founders.get("РосОрг"))
+                if isinstance(f, dict)
+            ],
+            "foreign_companies": len(_list(founders.get("ИнОрг"))),
+            "other": len(_list(founders.get("ПИФ"))) + len(_list(founders.get("РФ"))),
+        },
+        "licenses_count": len(_list(data.get("Лиценз"))),
+        "trademarks_count": len(_list(data.get("ТоварЗнак"))),
+        "branches_count": len(_list(_dict(data.get("Подразд")).get("Филиал"))),
+        "predecessors": len(_list(data.get("Правопредш"))),
+        "successors": len(_list(data.get("Правопреем"))),
+        "contacts": _dict(data.get("Контакты")) or None,
+        "bankruptcy_messages_count": len(_list(data.get("ЕФРСБ"))),
+        "unfair_supplier": {
+            "listed": bool(data.get("НедобПост")),
+            "records_count": len(unfair),
+            "records": unfair,
+        },
+        "flags": {
+            "disqualified_persons": bool(data.get("ДисквЛица")),
+            "mass_managers": bool(data.get("МассРуковод")),
+            "mass_founders": bool(data.get("МассУчред")),
+            "illegal_finance": bool(data.get("НелегалФин")),
+            "illegal_finance_status": data.get("НелегалФинСтатус"),
+            "sanctions": bool(data.get("Санкции")),
+            "sanction_countries": _list(data.get("СанкцииСтраны")),
+            "founder_sanctions": bool(data.get("СанкцУчр")),
+        },
+        "egrul_extract_date": data.get("ДатаВып"),
+    }
+
+
+def _build_entrepreneur_profile(data: dict) -> dict:
+    status = _dict(data.get("Статус"))
+    termination = _dict(data.get("Прекращ"))
+    tax = _dict(data.get("Налоги"))
+    msp = _dict(data.get("РМСП"))
+    okved = _dict(data.get("ОКВЭД"))
+    unfair = _list(data.get("НедобПостЗап"))
+
+    def org_brief(item: dict) -> dict:
+        return {
+            "ogrn": item.get("ОГРН"),
+            "inn": item.get("ИНН"),
+            "name": item.get("НаимСокр") or item.get("НаимПолн"),
+            "status": item.get("Статус"),
+        }
+
+    return {
+        "ogrnip": data.get("ОГРНИП"),
+        "inn": data.get("ИНН"),
+        "full_name": data.get("ФИО"),
+        "type": data.get("Тип"),
+        "registration_date": data.get("ДатаРег"),
+        "status": {"code": status.get("Код"), "name": status.get("Наим")},
+        "termination": {"date": termination.get("Дата"), "reason": termination.get("Наим")}
+        if termination
+        else None,
+        "region": _dict(data.get("Регион")).get("Наим"),
+        "locality": data.get("НасПункт"),
+        "main_okved": {"code": okved.get("Код"), "name": okved.get("Наим")},
+        "additional_okved_count": len(_list(data.get("ОКВЭДДоп"))),
+        "legal_form": _dict(data.get("ОКОПФ")).get("Наим"),
+        "taxes": {"special_regimes": _list(tax.get("ОсобРежим"))},
+        "msp": {"category": msp.get("Кат"), "included_at": msp.get("ДатаВкл")} if msp else None,
+        "msp_support_count": len(_list(data.get("ПоддержМСП"))),
+        "managed_companies": [org_brief(o) for o in _list(data.get("СвязРуковод")) if isinstance(o, dict)],
+        "founded_companies": [org_brief(o) for o in _list(data.get("СвязУчред")) if isinstance(o, dict)],
+        "licenses_count": len(_list(data.get("Лиценз"))),
+        "trademarks_count": len(_list(data.get("ТоварЗнак"))),
+        "bankruptcy_messages_count": len(_list(data.get("ЕФРСБ"))),
+        "unfair_supplier": {
+            "listed": bool(data.get("НедобПост")),
+            "records_count": len(unfair),
+            "records": unfair,
+        },
+        "flags": {
+            "mass_managers": bool(data.get("МассРуковод")),
+            "mass_founders": bool(data.get("МассУчред")),
+        },
+        "egrip_extract_date": data.get("ДатаВып"),
+    }
+
+
 def build_report(payloads: dict[str, dict], errors: dict[str, str], inn: str) -> dict:
     """Собирает сводный отчёт из сырых ответов Checko."""
     reliability = (payloads.get("reliability") or {}).get("data") or {}
@@ -99,6 +259,14 @@ def build_report(payloads: dict[str, dict], errors: dict[str, str], inn: str) ->
 
     report = {
         "company": company,
+        "company_profile": _build_company_profile(_dict(payloads["company"].get("data")))
+        if "company" in payloads
+        else None,
+        "entrepreneur_profile": _build_entrepreneur_profile(
+            _dict(payloads["entrepreneur"].get("data"))
+        )
+        if "entrepreneur" in payloads
+        else None,
         "reliability": {
             "scale": reliability.get("Масштаб"),
             "nominality": reliability.get("Номинальность"),
@@ -143,14 +311,25 @@ def build_report(payloads: dict[str, dict], errors: dict[str, str], inn: str) ->
     }
 
     # Эвристика итоговой оценки риска
+    profile = report["company_profile"] or report["entrepreneur_profile"] or {}
+    flags = profile.get("flags") or {}
+    status_name = ((profile.get("status") or {}).get("name") or "").lower()
     high = (
         bool(bankruptcy)
+        or bool(flags.get("sanctions") or flags.get("illegal_finance"))
+        or bool((profile.get("unfair_supplier") or {}).get("listed"))
+        or bool(profile.get("liquidation") or profile.get("termination"))
+        or "ликвидац" in status_name
+        or "банкрот" in status_name
         or (balance.get("Негатив") or 0) >= 50
         or ((reliability.get("ФинРиски") or {}).get("Уровень") or 0) >= 4
         or ((reliability.get("Номинальность") or {}).get("Уровень") or 0) >= 3
     )
     medium = (
         bool(enforcements)
+        or bool((profile.get("taxes") or {}).get("arrears"))
+        or bool((profile.get("legal_address") or {}).get("unreliable"))
+        or any(flags.get(k) for k in ("disqualified_persons", "mass_managers", "mass_founders", "founder_sanctions"))
         or bool(report["legal_cases"] and report["legal_cases"]["as_defendant_active"])
         or (balance.get("Негатив") or 0) >= 20
         or ((reliability.get("ФинРиски") or {}).get("Уровень") or 0) == 3
@@ -194,6 +373,8 @@ class CounterpartyCheckService:
         check_id = str(uuid.uuid4())
         try:
             for source in SOURCES:
+                if SOURCE_ONLY_FOR.get(source, counterparty.type) != counterparty.type:
+                    continue  # company — только ООО, entrepreneur — только ИП
                 try:
                     payload = client.fetch(source, inn)
                     payloads[source] = payload
