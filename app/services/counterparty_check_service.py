@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from app.database import ReferenceSessionLocal
 from app.models.counterparty_check import CounterpartyCheckDB, CounterpartyCheckSourceDB
 from app.models.reference import CounterpartyDB, DetailsIPDB, DetailsLLCDB
 from app.services.checko_client import SOURCES, CheckoClient, CheckoError
@@ -51,7 +50,10 @@ def _latest_finances(data: dict | None) -> dict | None:
     report = data[year]
 
     def value(code: str):
-        return (report.get(code) or {}).get("СумОтч")
+        item = report.get(code)
+        if isinstance(item, dict):
+            return item.get("СумОтч", item.get("Итог"))
+        return item if isinstance(item, (int, float)) else None
 
     return {
         "year": int(year),
@@ -212,13 +214,13 @@ class CounterpartyCheckService:
         finally:
             client.close()
 
-        report = build_report(payloads, errors, inn) if payloads else None
+        report = build_report(payloads, errors, inn) if payloads else {"errors": errors}
         check = CounterpartyCheckDB(
             id=check_id,
             counterparty_id=counterparty_id,
             inn=inn,
             status="error" if not payloads else "partial" if errors else "ok",
-            risk_level=report["risk_level"] if report else None,
+            risk_level=report.get("risk_level"),
             report=report,
             trigger=trigger,
             checked_at=datetime.now(),
@@ -324,11 +326,3 @@ class CounterpartyCheckService:
                 failed[cp_id] = "внутренняя ошибка"
         return {"checked": done, "failed": failed}
 
-
-def run_due_checks_job() -> None:
-    db = ReferenceSessionLocal()
-    try:
-        result = CounterpartyCheckService(db).run_due()
-        logger.info("Плановая проверка контрагентов: %s", result)
-    finally:
-        db.close()
