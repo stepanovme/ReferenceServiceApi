@@ -14,6 +14,7 @@ UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
 LOGOS_DIR = UPLOADS_DIR / "logos"
 OBJECT_MEDIA_DIR = UPLOADS_DIR / "object_media"
 
+from app.models.counterparty_check import CounterpartyCheckDB
 from app.models.reference import (
     BankAccountDB,
     ContractDB,
@@ -579,6 +580,25 @@ class ReferenceService:
             ],
         }
 
+    def _latest_risk(self, counterparty_ids: list[str]) -> dict[str, tuple[str | None, datetime]]:
+        """Уровень риска из последней успешной проверки: id -> (risk_level, checked_at)."""
+        if not counterparty_ids:
+            return {}
+        rows = (
+            self.db.query(CounterpartyCheckDB)
+            .filter(
+                CounterpartyCheckDB.counterparty_id.in_(counterparty_ids),
+                CounterpartyCheckDB.status != "error",
+            )
+            .order_by(CounterpartyCheckDB.checked_at.asc())
+            .all()
+        )
+        return {row.counterparty_id: (row.risk_level, row.checked_at) for row in rows}
+
+    def _risk_fields(self, counterparty_id: str) -> dict:
+        level, checked_at = self._latest_risk([counterparty_id]).get(counterparty_id, (None, None))
+        return {"risk_level": level, "risk_checked_at": checked_at}
+
     def list_counterparties(self, counterparty_type: str | None, is_internal: bool | None):
         query = self.db.query(CounterpartyDB)
         if counterparty_type:
@@ -586,6 +606,7 @@ class ReferenceService:
         if is_internal is not None:
             query = query.filter(CounterpartyDB.is_internal == is_internal)
         counterparties = query.all()
+        risk_by_id = self._latest_risk([cp.id for cp in counterparties])
         inn_by_id: dict[str, str | None] = {}
         if counterparties:
             ids = [cp.id for cp in counterparties]
@@ -608,6 +629,8 @@ class ReferenceService:
                 "is_internal": bool(cp.is_internal),
                 "contract_prefix": cp.contract_prefix,
                 "logo_url": cp.logo_url,
+                "risk_level": risk_by_id.get(cp.id, (None, None))[0],
+                "risk_checked_at": risk_by_id.get(cp.id, (None, None))[1],
                 "created_at": cp.created_at,
             }
             for cp in counterparties
@@ -677,6 +700,7 @@ class ReferenceService:
                 "is_internal": bool(counterparty.is_internal),
                 "contract_prefix": counterparty.contract_prefix,
                 "logo_url": counterparty.logo_url,
+                **self._risk_fields(counterparty.id),
             },
             "details": {
                 "inn": details.inn,
@@ -760,6 +784,7 @@ class ReferenceService:
                 "is_internal": bool(counterparty.is_internal),
                 "contract_prefix": counterparty.contract_prefix,
                 "logo_url": counterparty.logo_url,
+                **self._risk_fields(counterparty.id),
             },
             "details": {
                 "inn": details.inn,
@@ -1072,6 +1097,7 @@ class ReferenceService:
             return []
 
         counterparty_ids = [cp.id for cp in counterparties]
+        risk_by_id = self._latest_risk(counterparty_ids)
 
         llc_rows = (
             self.db.query(DetailsLLCDB)
@@ -1189,6 +1215,8 @@ class ReferenceService:
                     "email": email,
                     "inn_ogrn_kpp": inn_ogrn_kpp,
                     "logo_url": cp.logo_url,
+                    "risk_level": risk_by_id.get(cp.id, (None, None))[0],
+                    "risk_checked_at": risk_by_id.get(cp.id, (None, None))[1],
                 }
             )
 
