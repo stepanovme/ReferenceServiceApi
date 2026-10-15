@@ -797,6 +797,9 @@ class ReferenceService:
                 "okato": details.okato,
                 "oktmo": details.oktmo,
                 "date_register": details.date_register,
+                "legal_address": details.legal_address,
+                "actual_address": details.actual_address,
+                "postal_address": details.postal_address,
             },
             "additional_okved": additional_okved,
             "owner": owner,
@@ -1185,6 +1188,7 @@ class ReferenceService:
             elif cp.type == "IP":
                 details = ip_by_id.get(cp.id)
                 if details:
+                    address = details.legal_address
                     inn = details.inn
                     ogrn = details.ogrnip
                     person_id = details.person_id

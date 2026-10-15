@@ -133,6 +133,9 @@ class DetailsIPCreate(BaseModel):
     oktmo: Optional[str] = None
     person_id: str
     date_register: Optional[date] = None
+    legal_address: Optional[str] = None
+    actual_address: Optional[str] = None
+    postal_address: Optional[str] = None
 
 
 class DetailsIPUpdate(BaseModel):
@@ -152,6 +155,9 @@ class DetailsIPUpdate(BaseModel):
     oktmo: Optional[str] = None
     person_id: Optional[str] = None
     date_register: Optional[date] = None
+    legal_address: Optional[str] = None
+    actual_address: Optional[str] = None
+    postal_address: Optional[str] = None
 
 
 class DetailsPhysCreate(BaseModel):

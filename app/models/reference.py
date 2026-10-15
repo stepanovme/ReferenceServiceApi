@@ -54,6 +54,9 @@ class DetailsIPDB(Base):
     oktmo = Column(String(200))
     person_id = Column(CHAR(36), nullable=False)
     date_register = Column(Date)
+    legal_address = Column(Text)
+    actual_address = Column(Text)
+    postal_address = Column(Text)
 
 
 class DetailsLLCDB(Base):

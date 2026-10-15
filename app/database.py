@@ -68,16 +68,23 @@ def get_supply_db() -> Generator[Session, None, None]:  # pyright: ignore[report
 def init_db():
     Base.metadata.create_all(bind=reference_engine)
     with reference_engine.connect() as conn:
-        result = conn.execute(
-            text(
-                "SELECT COUNT(*) FROM information_schema.COLUMNS "
-                "WHERE TABLE_SCHEMA = DATABASE() "
-                "AND TABLE_NAME = 'counterparties' AND COLUMN_NAME = 'logo_url'"
+        for table, column, ddl in (
+            ("counterparties", "logo_url", "VARCHAR(500) NULL"),
+            ("details_ip", "legal_address", "TEXT NULL"),
+            ("details_ip", "actual_address", "TEXT NULL"),
+            ("details_ip", "postal_address", "TEXT NULL"),
+        ):
+            result = conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                    "WHERE TABLE_SCHEMA = DATABASE() "
+                    "AND TABLE_NAME = :table AND COLUMN_NAME = :column"
+                ),
+                {"table": table, "column": column},
             )
-        )
-        if result.scalar() == 0:
-            conn.execute(text("ALTER TABLE counterparties ADD COLUMN logo_url VARCHAR(500) NULL"))
-            conn.commit()
+            if result.scalar() == 0:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+                conn.commit()
 
 
 DbSession = Annotated[Session, Depends(get_db)]
