@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import BinaryIO
 
 from sqlalchemy.orm import Session
 
@@ -13,13 +15,6 @@ from app.models.reference import CounterpartyDB
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 FILES_DIR = ROOT_DIR / "counterparty_files"
 FOUNDING_DOCUMENTS_DIR = ROOT_DIR / "counterparty_founding_documents"
-MAX_FILE_SIZE = 20 * 1024 * 1024
-
-
-class FileTooLarge(Exception):
-    pass
-
-
 def _payload(row) -> dict:
     return {
         "id": row.id,
@@ -52,17 +47,18 @@ class CounterpartyFileService:
         counterparty_id: str,
         filename: str,
         content_type: str | None,
-        file_bytes: bytes,
+        stream: BinaryIO,
     ) -> dict | None:
         if not self._exists(counterparty_id):
             return None
-        if len(file_bytes) > MAX_FILE_SIZE:
-            raise FileTooLarge
 
         self.dir.mkdir(parents=True, exist_ok=True)
         file_id = str(uuid.uuid4())
-        # на диске — только uuid, без исходного имени и расширения
-        (self.dir / file_id).write_bytes(file_bytes)
+        # на диске — только uuid, без исходного имени и расширения; копируем кусками, без загрузки в память
+        path = self.dir / file_id
+        with path.open("wb") as out:
+            shutil.copyfileobj(stream, out, length=1024 * 1024)
+        size = path.stat().st_size
 
         row = self.model(
             id=file_id,
@@ -70,11 +66,15 @@ class CounterpartyFileService:
             file_name=Path(filename).name[:255] or "file",
             stored_name=file_id,
             content_type=(content_type or None),
-            size=len(file_bytes),
+            size=size,
             uploaded_at=datetime.now(),
         )
-        self.db.add(row)
-        self.db.commit()
+        try:
+            self.db.add(row)
+            self.db.commit()
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
         return _payload(row)
 
     def list(self, counterparty_id: str) -> list[dict]:

@@ -7,9 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import DbSession
 from app.middleware.auth_middleware import get_session
 from app.services.counterparty_file_service import (
-    MAX_FILE_SIZE,
     CounterpartyFileService,
-    FileTooLarge,
     founding_documents_service,
 )
 
@@ -28,17 +26,13 @@ def build_files_router(
     )
 
     @router.post(f"/{{counterparty_id}}/{path}", summary=f"Загрузить: {noun}")
-    async def upload(counterparty_id: str, file: UploadFile, db: DbSession):
-        file_bytes = await file.read(MAX_FILE_SIZE + 1)
-        try:
-            data = service_factory(db).upload(
-                counterparty_id,
-                file.filename or "file",
-                file.content_type,
-                file_bytes,
-            )
-        except FileTooLarge:
-            raise HTTPException(status_code=413, detail="Файл слишком большой (максимум 20 МБ)") from None
+    def upload(counterparty_id: str, file: UploadFile, db: DbSession):
+        data = service_factory(db).upload(
+            counterparty_id,
+            file.filename or "file",
+            file.content_type,
+            file.file,
+        )
         if not data:
             raise HTTPException(status_code=404, detail="Контрагент не найден")
         return data
