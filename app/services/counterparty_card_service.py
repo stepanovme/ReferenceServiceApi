@@ -79,11 +79,6 @@ class CounterpartyCardService:
             rows = self._ip_rows(basic, details, data)
         self._add_table(doc, "Реквизиты", rows)
 
-        if data.get("additional_okved"):
-            self._add_heading(doc, "Дополнительные виды деятельности (ОКВЭД)")
-            for code in data["additional_okved"]:
-                doc.add_paragraph(str(code), style="List Bullet")
-
         self._add_bank_accounts(doc, accounts)
 
         footer = doc.add_paragraph()

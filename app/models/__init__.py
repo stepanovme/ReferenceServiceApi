@@ -2,6 +2,7 @@ from app.models.counterparty_check import (
     CounterpartyCheckDB,
     CounterpartyCheckSourceDB,
     CounterpartyFileDB,
+    CounterpartyFoundingDocumentDB,
 )
 from app.models.reference import (
     BankAccountDB,
@@ -24,6 +25,7 @@ __all__ = [
     "CounterpartyCheckDB",
     "CounterpartyCheckSourceDB",
     "CounterpartyFileDB",
+    "CounterpartyFoundingDocumentDB",
     "BankAccountDB",
     "ContractDB",
     "CounterpartyAdditionalDB",
