@@ -387,6 +387,7 @@ class ReferenceService:
             self.db.query(ObjectDB, EmployeeDB, PersonDB)
             .outerjoin(EmployeeDB, ObjectDB.manager_id == EmployeeDB.id)
             .outerjoin(PersonDB, EmployeeDB.person_id == PersonDB.id)
+            .order_by(ObjectDB.created_at.desc())
             .all()
         )
         work_type_names = {wt.id: wt.name for wt in self.db.query(WorkTypeDB).all()}
