@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import re
 from difflib import SequenceMatcher
@@ -20,6 +20,7 @@ from app.models.reference import (
     ContractDB,
     CounterpartyAdditionalDB,
     CounterpartyDB,
+    CounterpartyTaxSettingDB,
     DetailsIPDB,
     DetailsLLCDB,
     DetailsPhysDB,
@@ -59,9 +60,24 @@ from app.schemas import (
     PersonUpdate,
     PositionCreate,
     PositionUpdate,
+    TaxSettingCreate,
+    TaxSettingUpdate,
     WorkTypeUpdate,
     WorkTypeCreate,
 )
+
+
+TAX_SYSTEMS = {
+    "OSN": "ОСН",
+    "USN_INCOME": "УСН Доходы",
+    "USN_INCOME_EXPENSE": "УСН Доходы - Расходы",
+    "AUSN_INCOME": "АУСН Доходы",
+    "AUSN_INCOME_EXPENSE": "АУСН Доходы - Расходы",
+    "PSN": "ПСН",
+    "NPD": "НПД",
+    "ESHN": "ЕСХН",
+}
+VAT_RATES = {0, 5, 7, 10, 22}
 
 
 def _full_name(person: PersonDB) -> str:
@@ -2272,3 +2288,145 @@ class ReferenceService:
         self.db.delete(media)
         self.db.commit()
         return {"deleted": True, "id": media_id}
+
+    # ------------------------------------------------------------------
+    # Налогообложение контрагентов
+    # ------------------------------------------------------------------
+
+    def list_tax_systems(self):
+        return [{"code": code, "name": name} for code, name in TAX_SYSTEMS.items()]
+
+    def _tax_setting_payload(self, item: CounterpartyTaxSettingDB):
+        return {
+            "id": item.id,
+            "counterparty_id": item.counterparty_id,
+            "tax_system": item.tax_system,
+            "tax_system_name": TAX_SYSTEMS.get(item.tax_system),
+            "tax_rate": float(item.tax_rate) if item.tax_rate is not None else None,
+            "is_vat_payer": bool(item.is_vat_payer),
+            "vat_rate": item.vat_rate,
+            "vat_exemption_basis": item.vat_exemption_basis,
+            "valid_from": item.valid_from,
+            "valid_to": item.valid_to,
+            "comment": item.comment,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at,
+        }
+
+    def _validate_tax_setting(self, data: dict):
+        if data.get("tax_system") not in TAX_SYSTEMS:
+            raise ValueError("Недопустимая система налогообложения")
+        if data.get("is_vat_payer"):
+            if data.get("vat_rate") not in VAT_RATES:
+                raise ValueError("Ставка НДС должна быть одной из: 0, 5, 7, 10, 22")
+            data["vat_exemption_basis"] = None
+        else:
+            if data.get("vat_rate") is not None:
+                raise ValueError("Ставка НДС указывается только для плательщика НДС")
+        valid_to = data.get("valid_to")
+        if valid_to and valid_to < data["valid_from"]:
+            raise ValueError("valid_to не может быть раньше valid_from")
+
+    def list_tax_settings(self, counterparty_id: str):
+        rows = (
+            self.db.query(CounterpartyTaxSettingDB)
+            .filter(CounterpartyTaxSettingDB.counterparty_id == counterparty_id)
+            .order_by(CounterpartyTaxSettingDB.valid_from.desc())
+            .all()
+        )
+        return [self._tax_setting_payload(item) for item in rows]
+
+    def get_current_tax_setting(self, counterparty_id: str):
+        today = datetime.utcnow().date()
+        item = (
+            self.db.query(CounterpartyTaxSettingDB)
+            .filter(
+                CounterpartyTaxSettingDB.counterparty_id == counterparty_id,
+                CounterpartyTaxSettingDB.valid_from <= today,
+                or_(
+                    CounterpartyTaxSettingDB.valid_to.is_(None),
+                    CounterpartyTaxSettingDB.valid_to >= today,
+                ),
+            )
+            .order_by(CounterpartyTaxSettingDB.valid_from.desc())
+            .first()
+        )
+        return self._tax_setting_payload(item) if item else None
+
+    def create_tax_setting(self, counterparty_id: str, payload: TaxSettingCreate):
+        exists = self.db.query(CounterpartyDB.id).filter(CounterpartyDB.id == counterparty_id).first()
+        if not exists:
+            return None
+
+        data = payload.model_dump(exclude_none=True)
+        data.setdefault("is_vat_payer", False)
+        self._validate_tax_setting(data)
+
+        open_item = (
+            self.db.query(CounterpartyTaxSettingDB)
+            .filter(
+                CounterpartyTaxSettingDB.counterparty_id == counterparty_id,
+                CounterpartyTaxSettingDB.valid_to.is_(None),
+            )
+            .first()
+        )
+        if open_item and not data.get("valid_to"):
+            if data["valid_from"] <= open_item.valid_from:
+                raise ValueError("valid_from должен быть позже начала действующей записи")
+            open_item.valid_to = data["valid_from"] - timedelta(days=1)
+
+        data["id"] = data.get("id") or str(uuid.uuid4())
+        data["counterparty_id"] = counterparty_id
+        data["created_at"] = datetime.utcnow()
+        item = CounterpartyTaxSettingDB(**data)
+        self.db.add(item)
+        self.db.commit()
+        self.db.refresh(item)
+        return self._tax_setting_payload(item)
+
+    def update_tax_setting(self, tax_setting_id: str, payload: TaxSettingUpdate):
+        item = (
+            self.db.query(CounterpartyTaxSettingDB)
+            .filter(CounterpartyTaxSettingDB.id == tax_setting_id)
+            .first()
+        )
+        if not item:
+            return None
+
+        patch = payload.model_dump(exclude_unset=True)
+        if not patch:
+            return self._tax_setting_payload(item)
+
+        merged = {
+            "tax_system": item.tax_system,
+            "tax_rate": item.tax_rate,
+            "is_vat_payer": bool(item.is_vat_payer),
+            "vat_rate": item.vat_rate,
+            "vat_exemption_basis": item.vat_exemption_basis,
+            "valid_from": item.valid_from,
+            "valid_to": item.valid_to,
+            "comment": item.comment,
+        }
+        merged.update(patch)
+        if patch.get("is_vat_payer") is False and "vat_rate" not in patch:
+            merged["vat_rate"] = None
+        self._validate_tax_setting(merged)
+
+        for field, value in merged.items():
+            setattr(item, field, value)
+        item.updated_at = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(item)
+        return self._tax_setting_payload(item)
+
+    def delete_tax_setting(self, tax_setting_id: str):
+        item = (
+            self.db.query(CounterpartyTaxSettingDB)
+            .filter(CounterpartyTaxSettingDB.id == tax_setting_id)
+            .first()
+        )
+        if not item:
+            return None
+        self.db.delete(item)
+        self.db.commit()
+        return {"deleted": True, "id": tax_setting_id}

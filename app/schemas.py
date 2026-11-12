@@ -319,3 +319,29 @@ class ObjectLevelUpdate(BaseModel):
     work_type: Optional[str] = None
     contract_id: Optional[str] = None
     parent_id: Optional[str] = None
+
+
+class TaxSettingCreate(BaseModel):
+    id: Optional[str] = None
+    tax_system: str = Field(
+        ...,
+        description="OSN, USN_INCOME, USN_INCOME_EXPENSE, AUSN_INCOME, AUSN_INCOME_EXPENSE, PSN, NPD, ESHN",
+    )
+    tax_rate: Optional[float] = Field(None, description="Ставка основного налога, %")
+    is_vat_payer: bool = False
+    vat_rate: Optional[int] = Field(None, description="0, 5, 7, 10 или 22; только для плательщиков НДС")
+    vat_exemption_basis: Optional[str] = None
+    valid_from: date
+    valid_to: Optional[date] = None
+    comment: Optional[str] = None
+
+
+class TaxSettingUpdate(BaseModel):
+    tax_system: Optional[str] = None
+    tax_rate: Optional[float] = None
+    is_vat_payer: Optional[bool] = None
+    vat_rate: Optional[int] = None
+    vat_exemption_basis: Optional[str] = None
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    comment: Optional[str] = None

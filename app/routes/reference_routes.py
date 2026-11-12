@@ -28,6 +28,8 @@ from app.schemas import (
     PersonUpdate,
     PositionCreate,
     PositionUpdate,
+    TaxSettingCreate,
+    TaxSettingUpdate,
     WorkTypeUpdate,
     WorkTypeCreate,
 )
@@ -501,6 +503,60 @@ def update_phys(counterparty_id: str, payload: DetailsPhysUpdate, db: DbSession)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not data:
         raise HTTPException(status_code=404, detail="Физлицо не найдено")
+    return data
+
+
+@counterparties_router.get("/tax-systems", summary="Справочник систем налогообложения")
+def list_tax_systems(db: DbSession):
+    service = ReferenceService(db)
+    return service.list_tax_systems()
+
+
+@counterparties_router.patch("/tax-settings/{tax_setting_id}", summary="Редактировать налогообложение")
+def update_tax_setting(tax_setting_id: str, payload: TaxSettingUpdate, db: DbSession):
+    service = ReferenceService(db)
+    try:
+        data = service.update_tax_setting(tax_setting_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not data:
+        raise HTTPException(status_code=404, detail="Запись налогообложения не найдена")
+    return data
+
+
+@counterparties_router.delete("/tax-settings/{tax_setting_id}", summary="Удалить налогообложение")
+def delete_tax_setting(tax_setting_id: str, db: DbSession):
+    service = ReferenceService(db)
+    data = service.delete_tax_setting(tax_setting_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Запись налогообложения не найдена")
+    return data
+
+
+@counterparties_router.get("/{counterparty_id}/tax-settings", summary="История налогообложения контрагента")
+def list_tax_settings(counterparty_id: str, db: DbSession):
+    service = ReferenceService(db)
+    return service.list_tax_settings(counterparty_id)
+
+
+@counterparties_router.get("/{counterparty_id}/tax-settings/current", summary="Текущее налогообложение контрагента")
+def get_current_tax_setting(counterparty_id: str, db: DbSession):
+    service = ReferenceService(db)
+    data = service.get_current_tax_setting(counterparty_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Налогообложение не задано")
+    return data
+
+
+@counterparties_router.post("/{counterparty_id}/tax-settings", summary="Добавить налогообложение контрагента")
+def create_tax_setting(counterparty_id: str, payload: TaxSettingCreate, db: DbSession):
+    service = ReferenceService(db)
+    try:
+        data = service.create_tax_setting(counterparty_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not data:
+        raise HTTPException(status_code=404, detail="Контрагент не найден")
     return data
 
 

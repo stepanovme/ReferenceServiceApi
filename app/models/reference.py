@@ -1,4 +1,4 @@
-from sqlalchemy import CHAR, Boolean, Column, Date, DateTime, Integer, String, Text
+from sqlalchemy import CHAR, Boolean, Column, Date, DateTime, Integer, Numeric, String, Text
 
 from app.database import Base
 
@@ -210,3 +210,20 @@ class PersonDB(Base):
     phone_personal = Column(String(18))
     email_personal = Column(String(200))
     birth_date = Column(Date)
+
+
+class CounterpartyTaxSettingDB(Base):
+    __tablename__ = "counterparty_tax_settings"
+
+    id = Column(CHAR(36), primary_key=True)
+    counterparty_id = Column(CHAR(36), nullable=False, index=True)
+    tax_system = Column(String(30), nullable=False)
+    tax_rate = Column(Numeric(5, 2))
+    is_vat_payer = Column(Boolean, nullable=False, default=False)
+    vat_rate = Column(Integer)
+    vat_exemption_basis = Column(String(255))
+    valid_from = Column(Date, nullable=False)
+    valid_to = Column(Date)
+    comment = Column(Text)
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
