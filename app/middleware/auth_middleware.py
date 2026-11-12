@@ -1,14 +1,16 @@
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.database import get_auth_db
+from app.database import Tenant, get_auth_db, get_tenant
 from app.repositories.session_repository import SessionRepository
 
 
 def get_session(
-    session_token: str | None = Cookie(default=None, alias="session"),
+    request: Request,
     db: Session = Depends(get_auth_db),
+    tenant: Tenant = Depends(get_tenant),
 ):
+    session_token = request.cookies.get(tenant.session_cookie)
     if not session_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Session token missing"

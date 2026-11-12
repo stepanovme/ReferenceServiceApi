@@ -23,6 +23,7 @@ class Tenant:
     reference_engine: Engine
     auth_engine: Engine
     supply_engine: Engine
+    session_cookie: str = "session"
 
 
 def _engine(prefix: str, database: str) -> Engine:
@@ -60,7 +61,8 @@ def _load_tenants() -> list[Tenant]:
         tenants.append(Tenant(name, hosts,
                               _engine("", _required(f"{prefix}_REFERENCE_DB_NAME")),
                               _engine("AUTH_DB", _required(f"{prefix}_DB_NAME")),
-                              _engine("SUPPLY_DB", _required(f"{prefix}_SUPPLY_DB_NAME"))))
+                              _engine("SUPPLY_DB", _required(f"{prefix}_SUPPLY_DB_NAME")),
+                              os.getenv(f"{prefix}_SESSION_COOKIE", "session").strip() or "session"))
     return tenants
 
 
