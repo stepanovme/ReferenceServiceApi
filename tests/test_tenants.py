@@ -21,7 +21,7 @@ def request(host, origin=None, referer=None):
 class TenantTests(unittest.TestCase):
     def test_configuration_and_routing(self):
         env = {
-            "TENANTS": "FIRST,EFIMOV", "TENANT_FIRST_HOSTS": "supply.st29.ru,metal.st29.ru",
+            "TENANTS": "FIRST,EFIMOV", "TENANT_FIRST_HOSTS": "supply.st29.ru,metal.st29.ru,timetrack.st29.ru",
             "TENANT_FIRST_DB_NAME": "auth_first", "TENANT_FIRST_REFERENCE_DB_NAME": "reference_first",
             "TENANT_FIRST_SUPPLY_DB_NAME": "supply_first", "TENANT_EFIMOV_HOSTS": "efimov.st29.ru",
             "TENANT_EFIMOV_DB_NAME": "auth_second", "TENANT_EFIMOV_REFERENCE_DB_NAME": "reference_second",
@@ -32,6 +32,7 @@ class TenantTests(unittest.TestCase):
         with patch.object(database, "tenants", configured):
             first = database.get_tenant(request("api.st29.ru", "https://supply.st29.ru"))
             second = database.get_tenant(request("efimov.st29.ru:443"))
+            self.assertEqual(database.get_tenant(request("timetrack.st29.ru", referer="https://timetrack.st29.ru/home")).name, "FIRST")
             self.assertEqual(database.get_tenant(request("api.st29.ru", referer="https://efimov.st29.ru/employees?tab=internal")).name, "EFIMOV")
             self.assertEqual(database.get_tenant(request("api.st29.ru", referer="https://supply.st29.ru/")).name, "FIRST")
             self.assertEqual((first.reference_engine, first.auth_engine, first.supply_engine),
