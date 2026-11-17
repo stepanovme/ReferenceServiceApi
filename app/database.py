@@ -86,6 +86,22 @@ def get_tenant(request: Request) -> Tenant:
     for tenant in tenants:
         if host in tenant.hosts:
             return tenant
+    # Browsers often omit Origin on GET requests to a shared API host. In that
+    # case Referer identifies the page that initiated the request.
+    if not origin:
+        referer = request.headers.get("referer")
+        if referer:
+            try:
+                parsed_referer = urlsplit(referer)
+                if (parsed_referer.scheme in ("http", "https") and
+                        parsed_referer.hostname and not parsed_referer.username and
+                        not parsed_referer.password):
+                    referer_host = parsed_referer.hostname.lower().rstrip(".")
+                    for tenant in tenants:
+                        if referer_host in tenant.hosts:
+                            return tenant
+            except ValueError:
+                pass
     raise HTTPException(status_code=400, detail="Unknown tenant host")
 
 

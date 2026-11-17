@@ -9,10 +9,12 @@ from starlette.requests import Request
 from app import database
 
 
-def request(host, origin=None):
+def request(host, origin=None, referer=None):
     headers = [(b"host", host.encode())]
     if origin is not None:
         headers.append((b"origin", origin.encode()))
+    if referer is not None:
+        headers.append((b"referer", referer.encode()))
     return Request({"type": "http", "scheme": "https", "path": "/", "headers": headers})
 
 
@@ -30,6 +32,8 @@ class TenantTests(unittest.TestCase):
         with patch.object(database, "tenants", configured):
             first = database.get_tenant(request("api.st29.ru", "https://supply.st29.ru"))
             second = database.get_tenant(request("efimov.st29.ru:443"))
+            self.assertEqual(database.get_tenant(request("api.st29.ru", referer="https://efimov.st29.ru/employees?tab=internal")).name, "EFIMOV")
+            self.assertEqual(database.get_tenant(request("api.st29.ru", referer="https://supply.st29.ru/")).name, "FIRST")
             self.assertEqual((first.reference_engine, first.auth_engine, first.supply_engine),
                              ("reference_first", "auth_first", "supply_first"))
             self.assertEqual((second.reference_engine, second.auth_engine, second.supply_engine),
@@ -37,6 +41,9 @@ class TenantTests(unittest.TestCase):
             for origin in ("https://unknown.st29.ru", "null", "https://supply.st29.ru.evil.com"):
                 with self.assertRaises(HTTPException):
                     database.get_tenant(request("supply.st29.ru", origin))
+            for referer in (None, "https://efimov.st29.ru.evil.com/", "https://efimov.st29.ru@evil.com/"):
+                with self.assertRaises(HTTPException):
+                    database.get_tenant(request("api.st29.ru", referer=referer))
 
     def test_duplicate_hosts_rejected(self):
         env = {"TENANTS": "A,B", "TENANT_A_HOSTS": "same.example", "TENANT_B_HOSTS": "SAME.example",
