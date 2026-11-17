@@ -1,4 +1,5 @@
 import os
+import logging
 from dataclasses import dataclass
 from typing import Annotated, Generator
 from urllib.parse import urlsplit
@@ -10,6 +11,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -81,6 +84,7 @@ def get_tenant(request: Request) -> Tenant:
             raise ValueError("Invalid origin")
         host = (parsed.hostname if parsed else request.url.hostname) or ""
     except ValueError:
+        logger.warning("Tenant resolution failed: malformed Origin header")
         raise HTTPException(status_code=400, detail="Invalid request origin")
     host = host.lower().rstrip(".")
     for tenant in tenants:
@@ -102,6 +106,20 @@ def get_tenant(request: Request) -> Tenant:
                             return tenant
             except ValueError:
                 pass
+    # Do not log full URLs, cookies, or query strings: they can contain secrets.
+    def header_host(value: str | None) -> str:
+        if not value:
+            return "absent"
+        try:
+            return urlsplit(value).hostname or "invalid"
+        except ValueError:
+            return "invalid"
+
+    logger.warning(
+        "Tenant resolution failed: request_host=%s origin_host=%s referer_host=%s",
+        request.url.hostname or "absent", header_host(origin),
+        header_host(request.headers.get("referer")),
+    )
     raise HTTPException(status_code=400, detail="Unknown tenant host")
 
 
